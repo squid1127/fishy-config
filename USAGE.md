@@ -99,6 +99,34 @@ result = render(
 )
 ```
 
+### Plugins
+
+The rendering pipeline supports plugins which can hook into lifecycle events to
+influence skipping, mutate context before rendering, modify rendered output,
+and perform post-run actions (for example exporting artifacts).
+
+Pass plugin instances via the `plugins` field on `RenderOptions` or the
+high-level `render()` call using the `plugins` keyword.
+
+Example (using built-ins):
+
+```python
+from fishy_config import render
+from fishy_config.plugins.builtins import ZipExporterPlugin, SkipIfContextMissingPlugin
+
+result = render(
+  "config",
+  "output",
+  context={"deploy": {"enabled": True}},
+  plugins=[
+    SkipIfContextMissingPlugin("deploy.enabled"),
+    ZipExporterPlugin("release.zip"),
+  ],
+)
+
+print(result.artifacts)  # zip exporter will append archive path and hash
+```
+
 ### Advanced: Direct Pipeline
 
 For more control, use the pipeline directly:
