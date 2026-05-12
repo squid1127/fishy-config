@@ -5,6 +5,9 @@ from pathlib import Path
 import jinja2
 
 from .exceptions import TemplateRenderError
+from .log import get_logger
+
+logger = get_logger(__name__)
 
 
 class Jinja2Renderer:
@@ -43,6 +46,7 @@ class Jinja2Renderer:
             TemplateRenderError: If rendering fails
         """
         try:
+            logger.debug("Rendering template: %s", template_path)
             # Get relative path for Jinja2 loader
             if template_path.is_absolute():
                 rel_path = template_path.relative_to(self.config_dir)
@@ -51,32 +55,38 @@ class Jinja2Renderer:
 
             template = self.env.get_template(str(rel_path))
             rendered = template.render(**context)
+            logger.debug("Rendered template: %s (len=%d)", template_path, len(rendered))
             return rendered
         except jinja2.TemplateNotFound as e:
+            logger.exception("Template not found: %s", template_path)
             raise TemplateRenderError(
                 file=str(template_path),
                 line=None,
                 message=f"Template not found: {e}",
             ) from e
         except jinja2.UndefinedError as e:
+            logger.exception("Undefined variable while rendering: %s", template_path)
             raise TemplateRenderError(
                 file=str(template_path),
                 line=None,
                 message=f"Undefined variable: {e}",
             ) from e
         except jinja2.TemplateSyntaxError as e:
+            logger.exception("Template syntax error: %s line %s", template_path, e.lineno)
             raise TemplateRenderError(
                 file=str(template_path),
                 line=e.lineno,
                 message=f"Template syntax error: {e.message}",
             ) from e
         except jinja2.TemplateError as e:
+            logger.exception("Template rendering error: %s", template_path)
             raise TemplateRenderError(
                 file=str(template_path),
                 line=None,
                 message=f"Template rendering error: {e}",
             ) from e
         except Exception as e:
+            logger.exception("Unexpected error rendering template: %s", template_path)
             raise TemplateRenderError(
                 file=str(template_path),
                 line=None,

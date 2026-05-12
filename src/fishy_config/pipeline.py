@@ -10,6 +10,9 @@ from .exceptions import FileIOError, TemplateRenderError
 from .loader import load_context
 from .models import RenderOptions, RenderResult
 from .renderer import Jinja2Renderer
+from .log import get_logger
+
+logger = get_logger(__name__)
 
 
 class RenderPipeline:
@@ -39,7 +42,10 @@ class RenderPipeline:
         """
         # Build pathspec from patterns
         spec = pathspec.PathSpec.from_lines("gitwildmatch", self.options.skip_patterns)
-        return spec.match_file(str(path))
+        match = spec.match_file(str(path))
+        if match:
+            logger.debug("Skipping path by pattern: %s", path)
+        return match
 
     def _process_file(self, file_path: Path, rel_path: Path) -> None:
         """Process a single file (render or copy).
@@ -79,6 +85,7 @@ class RenderPipeline:
                 return
 
             # Render template
+            logger.debug("Rendering template %s -> %s", rel_path, dest_path)
             content = self.renderer.render_file(rel_path, self.options.context.data)
 
             if not self.options.dry_run:
@@ -88,6 +95,7 @@ class RenderPipeline:
                 dest_path.write_text(content, encoding="utf-8")
 
             self.result.files_rendered.append(str(dest_path))
+            logger.info("Rendered: %s", dest_path)
         except TemplateRenderError as e:
             self.result.add_error(
                 file=str(rel_path),
@@ -95,6 +103,7 @@ class RenderPipeline:
                 message=e.message,
                 line_number=e.line,
             )
+            logger.warning("Template error for %s: %s", rel_path, e.message)
         except Exception as e:
             self.result.add_error(
                 file=str(rel_path),
@@ -122,12 +131,14 @@ class RenderPipeline:
                 shutil.copy2(src_path, dest_path)
 
             self.result.files_copied.append(str(rel_path))
+            logger.info("Copied: %s", rel_path)
         except Exception as e:
             self.result.add_error(
                 file=str(rel_path),
                 error_type="io",
                 message=f"Failed to copy file: {e}",
             )
+            logger.exception("Failed to copy file: %s", rel_path)
 
     def run(self) -> RenderResult:
         """Execute the full render pipeline.
@@ -162,6 +173,15 @@ class RenderPipeline:
                     return self.result
 
             # Walk through config directory
+            logger.info("Starting render: %s -> %s", self.options.config_dir, self.options.dest_dir)
+            logger.debug(
+                "Render options: dry_run=%s strict=%s overwrite=%s skip=%s",
+                self.options.dry_run,
+                self.options.strict_undefined,
+                self.options.overwrite,
+                self.options.skip_patterns,
+            )
+
             for file_path in sorted(self.options.config_dir.rglob("*")):
                 if file_path.is_file():
                     # Get relative path
@@ -171,5 +191,13 @@ class RenderPipeline:
         finally:
             duration = time.time() - start_time
             self.result.duration_ms = duration * 1000
+            logger.info(
+                "Render completed in %.2fms: %d files processed (%d rendered, %d copied), errors=%d",
+                self.result.duration_ms,
+                self.result.total_files,
+                len(self.result.files_rendered),
+                len(self.result.files_copied),
+                len(self.result.errors),
+            )
 
         return self.result

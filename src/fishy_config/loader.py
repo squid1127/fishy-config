@@ -7,6 +7,9 @@ import yaml
 
 from .exceptions import ContextLoadError, ContextMergeError
 from .models import ContextConfig, ContextSource, MergeStrategy
+from .log import get_logger
+
+logger = get_logger(__name__)
 
 
 def load_yaml_file(path: Path) -> dict[str, Any]:
@@ -22,6 +25,7 @@ def load_yaml_file(path: Path) -> dict[str, Any]:
         ContextLoadError: If file cannot be read or parsed
     """
     try:
+        logger.debug("Loading YAML file: %s", path)
         with open(path, "r", encoding="utf-8") as f:
             content = yaml.safe_load(f)
             if not isinstance(content, dict):
@@ -134,15 +138,18 @@ def load_context(
     yaml_path = config_dir / context_file
     if yaml_path.exists():
         try:
+            logger.info("Found context file: %s", yaml_path)
             yaml_data = load_yaml_file(yaml_path)
             data = yaml_data
             sources.append(ContextSource(path=yaml_path, merge_strategy=MergeStrategy.DEEP))
         except ContextLoadError:
             # If context file exists but can't be parsed, fail
+            logger.exception("Failed to load context YAML: %s", yaml_path)
             raise
 
     # Merge runtime data (takes precedence)
     if runtime_data:
+        logger.info("Merging runtime context (overrides YAML)")
         data = merge_contexts(data, runtime_data, MergeStrategy.DEEP)
         sources.append(ContextSource(path=Path("<runtime>"), merge_strategy=MergeStrategy.DEEP))
 

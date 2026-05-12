@@ -17,6 +17,7 @@ from .exceptions import (
 from .loader import load_context
 from .models import ContextConfig, RenderOptions, RenderResult, RenderError
 from .pipeline import RenderPipeline
+from .log import configure_logging
 
 __all__ = [
     "render",
@@ -33,6 +34,7 @@ __all__ = [
     "FileIOError",
     "ConfigValidationError",
     "PluginError",
+    "configure_logging",
 ]
 
 
