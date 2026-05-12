@@ -138,7 +138,7 @@ def load_context(
     yaml_path = config_dir / context_file
     if yaml_path.exists():
         try:
-            logger.info("Found context file: %s", yaml_path)
+            logger.debug("Found context file: %s", yaml_path)
             yaml_data = load_yaml_file(yaml_path)
             data = yaml_data
             sources.append(ContextSource(path=yaml_path, merge_strategy=MergeStrategy.DEEP))
@@ -149,7 +149,7 @@ def load_context(
 
     # Merge runtime data (takes precedence)
     if runtime_data:
-        logger.info("Merging runtime context (overrides YAML)")
+        logger.debug("Merging runtime context (overrides YAML)")
         data = merge_contexts(data, runtime_data, MergeStrategy.DEEP)
         sources.append(ContextSource(path=Path("<runtime>"), merge_strategy=MergeStrategy.DEEP))
 

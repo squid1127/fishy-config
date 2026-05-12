@@ -86,7 +86,7 @@ class ZipExporterPlugin(BasePlugin):
 
             archive_path = self._resolve_archive_path(dest_dir)
 
-            logger.info("Creating zip archive: %s (root=%s)", archive_path, dest_dir)
+            logger.debug("Creating zip archive: %s (root=%s)", archive_path, dest_dir)
             shutil.make_archive(str(archive_path.with_suffix("")), "zip", root_dir=str(dest_dir))
 
             # Compute sha256
@@ -97,6 +97,6 @@ class ZipExporterPlugin(BasePlugin):
             digest = h.hexdigest()
             artifact_info = f"{archive_path}:{digest}"
             ctx.result.artifacts.append(artifact_info)
-            logger.info("Zip created: %s (sha256=%s)", archive_path, digest)
+            logger.debug("Zip created: %s (sha256=%s)", archive_path, digest)
         except Exception:
             logger.exception("ZipExporter failed")

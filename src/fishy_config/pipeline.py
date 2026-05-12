@@ -133,7 +133,7 @@ class RenderPipeline:
                 dest_path.write_text(content, encoding="utf-8")
 
             self.result.files_rendered.append(str(dest_path))
-            logger.info("Rendered: %s", dest_path)
+            logger.debug("Rendered: %s", dest_path)
         except TemplateRenderError as e:
             self.result.add_error(
                 file=str(rel_path),
@@ -187,7 +187,7 @@ class RenderPipeline:
                 shutil.copy2(src_path, dest_path)
 
             self.result.files_copied.append(str(rel_path))
-            logger.info("Copied: %s", rel_path)
+            logger.debug("Copied: %s", rel_path)
         except Exception as e:
             self.result.add_error(
                 file=str(rel_path),
