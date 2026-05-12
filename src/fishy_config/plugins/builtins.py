@@ -132,3 +132,38 @@ class ZipExporterPlugin(BasePlugin):
             logger.debug("Zip created: %s (sha256=%s)", archive_path, digest)
         except Exception:
             logger.exception("ZipExporter failed")
+
+
+class CopyArtifactPlugin(BasePlugin):
+    """Copy an artifact created next to the destination directory to a target directory.
+
+    This is useful for project-specific export steps that should stay in the library's
+    plugin system instead of in consumer code.
+    """
+
+    name = "copy_artifact"
+
+    def __init__(self, output_dir: str | Path, archive_name: str = "pack.zip"):
+        self.output_dir = Path(output_dir)
+        self.archive_name = archive_name
+
+    def on_run_end(self, ctx: PostRunContext) -> None:
+        try:
+            self.output_dir.mkdir(parents=True, exist_ok=True)
+
+            dest_dir = ctx.options.dest_dir
+            if dest_dir is None:
+                logger.warning("CopyArtifact: destination directory not present on options")
+                return
+
+            archive = dest_dir.parent / self.archive_name
+            if not archive.exists():
+                logger.warning("CopyArtifact: expected artifact %s does not exist", archive)
+                return
+
+            dest_path = self.output_dir / archive.name
+            logger.debug("Copying artifact %s -> %s", archive, dest_path)
+            shutil.copy2(archive, dest_path)
+            logger.debug("Copied artifact to %s", dest_path)
+        except Exception:
+            logger.exception("CopyArtifact failed")

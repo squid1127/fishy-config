@@ -20,6 +20,7 @@ from .pipeline import RenderPipeline
 from .log import configure_logging
 from .plugins.base import BasePlugin, Plugin as PluginProtocol, HookContext, PostRunContext
 from .plugins.builtins import (
+    CopyArtifactPlugin,
     RewriteRelativePathPlugin,
     SkipIfContextMissingPlugin,
     ZipExporterPlugin,
@@ -50,6 +51,7 @@ __all__ = [
     "SkipIfContextMissingPlugin",
     "RewriteRelativePathPlugin",
     "ZipExporterPlugin",
+    "CopyArtifactPlugin",
 ]
 
 
