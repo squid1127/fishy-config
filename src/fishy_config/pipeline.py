@@ -218,6 +218,34 @@ class RenderPipeline:
             # Create destination directory if needed
             if not self.options.dry_run:
                 try:
+                    # If requested, wipe destination directory before rendering.
+                    if self.options.clean_dest and self.options.dest_dir.exists():
+                        # Safety: do not allow wiping the config dir
+                        try:
+                            if self.options.dest_dir.resolve() == self.options.config_dir.resolve():
+                                self.result.add_error(
+                                    file="",
+                                    error_type="validation",
+                                    message="Destination directory is the same as config directory; refusing to wipe.",
+                                )
+                                self.result.success = False
+                                return self.result
+                        except Exception:
+                            # If resolve fails for any reason, skip the safety check and fail instead
+                            pass
+                        import shutil
+
+                        try:
+                            shutil.rmtree(self.options.dest_dir)
+                        except Exception as e:
+                            self.result.add_error(
+                                file="",
+                                error_type="io",
+                                message=f"Failed to wipe destination directory: {e}",
+                            )
+                            self.result.success = False
+                            return self.result
+
                     self.options.dest_dir.mkdir(parents=True, exist_ok=True)
                 except Exception as e:
                     self.result.add_error(

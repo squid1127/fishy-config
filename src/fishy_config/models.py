@@ -48,6 +48,7 @@ class RenderOptions(BaseModel):
     dry_run: bool = False
     template_extension: str = ".j2"
     overwrite: bool = False
+    clean_dest: bool = False
 
 
 class RenderError(BaseModel):
