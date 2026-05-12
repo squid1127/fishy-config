@@ -59,27 +59,46 @@ class ZipExporterPlugin(BasePlugin):
         self.archive_name = archive_name
 
     def on_run_end(self, result: RenderResult) -> None:
-        # Attempt to locate destination dir from metadata in result (best-effort)
-        # We expect pipeline to have added dest_dir to result via metadata isn't present,
-        # so this plugin will be best-effort and log if missing.
+        # Attempt to locate destination dir from result paths (best-effort)
         try:
-            # Try to guess dest_dir from files_copied or files_rendered paths
-            paths = result.files_rendered or result.files_copied
+            paths = list(result.files_rendered) + list(result.files_copied)
             if not paths:
                 logger.warning("ZipExporter: no files found to create archive")
                 return
 
-            any_path = Path(paths[0])
-            dest_dir = any_path
-            # Walk up until parent contains multiple files in result
-            while dest_dir.is_file():
-                dest_dir = dest_dir.parent
+            # Try to resolve at least one existing file path. Prefer absolute paths,
+            # fall back to resolving relative to CWD.
+            existing = []
+            for p in paths:
+                pth = Path(p)
+                if pth.exists():
+                    existing.append(pth.resolve())
+                    continue
+                # try relative to cwd
+                rel = Path.cwd() / p
+                if rel.exists():
+                    existing.append(rel.resolve())
 
+            if not existing:
+                logger.warning("ZipExporter: no existing output files found (checked absolute and CWD-relative paths)")
+                return
+
+            # Compute a common parent directory for all existing files
+            parents = [str(p.parent) for p in existing]
+            import os
+
+            common = Path(os.path.commonpath(parents))
+            if not common.exists():
+                logger.warning("ZipExporter: inferred common path does not exist: %s", common)
+                return
+
+            dest_dir = common
             archive_base = self.archive_name or f"{dest_dir.name}.zip"
             archive_path = dest_dir.parent / archive_base
-            # Create archive
-            logger.info("Creating zip archive: %s", archive_path)
+
+            logger.info("Creating zip archive: %s (root=%s)", archive_path, dest_dir)
             shutil.make_archive(str(archive_path.with_suffix("")), "zip", root_dir=str(dest_dir))
+
             # Compute sha256
             h = hashlib.sha256()
             with open(archive_path, "rb") as f:
