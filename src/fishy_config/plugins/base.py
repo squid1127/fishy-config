@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from ..models import RenderOptions, RenderResult
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass
 class HookContext:
     src_path: Path
     rel_path: Path
@@ -22,7 +22,7 @@ class HookContext:
     options: RenderOptions
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass
 class PostRunContext:
     options: RenderOptions
     result: RenderResult
