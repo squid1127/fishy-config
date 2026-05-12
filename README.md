@@ -1,4 +1,4 @@
-# fish-config
+# fishy-config
 
 A "simple" python-based library for templating config.
 
