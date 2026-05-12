@@ -9,3 +9,7 @@ You give it a directory of config files, j2 templates, and it renders them to a 
 ## Disclaimer
 
 This is a personal project, and is not intended for production use. (I say this in every one of my repos lol)
+
+## How much of it is vibe coded?
+
+Most of it lol.
