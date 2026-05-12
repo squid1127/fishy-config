@@ -18,6 +18,8 @@ from .loader import load_context
 from .models import ContextConfig, RenderOptions, RenderResult, RenderError
 from .pipeline import RenderPipeline
 from .log import configure_logging
+from .plugins.base import BasePlugin, Plugin as PluginProtocol
+from .plugins.manager import PluginManager
 
 __all__ = [
     "render",
@@ -35,6 +37,9 @@ __all__ = [
     "ConfigValidationError",
     "PluginError",
     "configure_logging",
+    "PluginProtocol",
+    "BasePlugin",
+    "PluginManager",
 ]
 
 
