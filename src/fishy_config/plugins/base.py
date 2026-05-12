@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Protocol, Optional
 from pathlib import Path
 from dataclasses import dataclass
+from pydantic import BaseModel
 
 from ..models import RenderOptions, RenderResult
 
@@ -20,6 +21,7 @@ class HookContext:
     dest_path: Path
     output_rel_path: Path
     context: dict
+    typed_context: BaseModel | None
     options: RenderOptions
 
 

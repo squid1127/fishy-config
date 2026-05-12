@@ -3,9 +3,26 @@
 from pathlib import Path
 
 import pytest
+from pydantic import BaseModel
 
 from fishy_config import render
+from fishy_config.plugins.base import BasePlugin, HookContext
 from fishy_config.exceptions import FishyConfigError
+
+
+class DemoContext(BaseModel):
+    app_name: str
+
+
+class CaptureTypedContextPlugin(BasePlugin):
+    name = "capture_typed_context"
+
+    def __init__(self):
+        self.seen = None
+
+    def pre_render(self, ctx: HookContext) -> dict:
+        self.seen = ctx.typed_context
+        return super().pre_render(ctx)
 
 
 class TestRenderAPI:
@@ -101,3 +118,25 @@ class TestRenderAPI:
 
         assert result.success
         assert (tmp_dest_dir / "config.yaml").exists()
+
+    def test_render_accepts_typed_context(self, tmp_config_dir, tmp_dest_dir):
+        """Test that a consumer-provided typed context is available to plugins."""
+        template_file = tmp_config_dir / "config.txt.j2"
+        template_file.write_text("Name: {{ app_name }}")
+
+        plugin = CaptureTypedContextPlugin()
+        typed_context = DemoContext(app_name="MyApp")
+
+        result = render(
+            tmp_config_dir,
+            tmp_dest_dir,
+            context={"app_name": "MyApp"},
+            typed_context=typed_context,
+            plugins=[plugin],
+        )
+
+        assert result.success
+        assert plugin.seen is not None
+        assert plugin.seen.app_name == "MyApp"
+        content = (tmp_dest_dir / "config.txt").read_text()
+        assert "MyApp" in content

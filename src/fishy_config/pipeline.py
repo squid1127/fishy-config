@@ -5,8 +5,9 @@ import time
 from pathlib import Path
 
 import pathspec
+from pydantic import ValidationError
 
-from .exceptions import FileIOError, TemplateRenderError
+from .exceptions import ConfigValidationError, FileIOError, TemplateRenderError
 from .loader import load_context
 from .models import RenderOptions, RenderResult
 from .renderer import Jinja2Renderer
@@ -26,6 +27,15 @@ class RenderPipeline:
             options: Render configuration
         """
         self.options = options
+        if self.options.typed_context is None and self.options.context_type is not None:
+            try:
+                self.options.typed_context = self.options.context_type.model_validate(
+                    self.options.context.data
+                )
+            except ValidationError as exc:
+                raise ConfigValidationError(
+                    f"Context validation failed for {self.options.context_type.__name__}: {exc}"
+                ) from exc
         self.renderer = Jinja2Renderer(
             options.config_dir,
             strict_undefined=options.strict_undefined,
@@ -103,6 +113,7 @@ class RenderPipeline:
                         dest_path=dest_path,
                         output_rel_path=rel_path,
                         context=ctx,
+                        typed_context=self.options.typed_context,
                         options=opts_copy,
                     )
                     ctx = self.plugin_manager.pre_render(hook_ctx)
@@ -177,6 +188,7 @@ class RenderPipeline:
                         dest_path=dest_path,
                         output_rel_path=rel_path,
                         context=self.options.context.data,
+                        typed_context=self.options.typed_context,
                         options=opts_copy,
                     )
                     _ = self.plugin_manager.pre_render(hook_ctx)

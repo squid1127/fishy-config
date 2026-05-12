@@ -48,6 +48,7 @@ class PluginManager:
                     dest_path=src_path,
                     output_rel_path=rel_path,
                     context=context,
+                    typed_context=self.options.typed_context if self.options else None,
                     options=opts,
                 )
                 if p.should_skip(hook):

@@ -5,6 +5,8 @@ __version__ = "0.1.0"
 from pathlib import Path
 from typing import Any
 
+from pydantic import BaseModel
+
 from .exceptions import (
     ConfigValidationError,
     ContextLoadError,
@@ -59,6 +61,8 @@ def render(
     config_dir: str | Path,
     dest_dir: str | Path,
     context: dict[str, Any] | None = None,
+    typed_context: BaseModel | None = None,
+    context_model_type: type[BaseModel] | None = None,
     plugins: list[Any] | None = None,
     *,
     preserve_structure: bool = True,
@@ -76,6 +80,8 @@ def render(
         config_dir: Source directory containing templates and config files
         dest_dir: Destination directory for rendered output
         context: Context dict for template rendering; overrides context.yaml
+        typed_context: Optional validated context model instance from the consumer
+        context_model_type: Optional consumer model class to validate context against
         preserve_structure: If True, preserve directory structure from config_dir
         skip_patterns: List of gitignore-style patterns for files to skip
         strict_undefined: If True, fail on undefined template variables
@@ -100,6 +106,8 @@ def render(
         config_dir=config_dir,
         dest_dir=dest_dir,
         context=ctx,
+        context_type=context_model_type,
+        typed_context=typed_context,
         preserve_structure=preserve_structure,
         skip_patterns=skip_patterns or [],
         plugins=plugins or [],

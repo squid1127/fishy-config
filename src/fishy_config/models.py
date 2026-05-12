@@ -41,6 +41,8 @@ class RenderOptions(BaseModel):
     config_dir: Path
     dest_dir: Path
     context: ContextConfig
+    context_type: type[BaseModel] | None = None
+    typed_context: BaseModel | None = None
     preserve_structure: bool = True
     skip_patterns: list[str] = Field(default_factory=lambda: ["*.md", ".git", ".gitkeep"])
     plugins: list[Any] = Field(default_factory=list)
