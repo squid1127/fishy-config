@@ -20,6 +20,8 @@ from .loader import load_context
 from .models import ContextConfig, RenderOptions, RenderResult, RenderError
 from .pipeline import RenderPipeline
 from .log import configure_logging
+from .project import ProjectConfig
+from .cli import create_app
 from .plugins.base import BasePlugin, Plugin as PluginProtocol, HookContext, PostRunContext
 from .plugins.builtins import (
     CopyArtifactPlugin,
@@ -31,8 +33,10 @@ from .plugins.manager import PluginManager
 
 __all__ = [
     "render",
+    "create_app",
     "load_context",
     "RenderPipeline",
+    "ProjectConfig",
     "ContextConfig",
     "RenderOptions",
     "RenderResult",
