@@ -1,5 +1,5 @@
 [project]
-name = "fish-config"
+name = "fishy-config"
 version = "0.1.0"
 description = "A \"simple\" config templating library"
 authors = [
