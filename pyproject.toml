@@ -3,8 +3,25 @@ name = "fishy-config"
 version = "0.1.0"
 description = "A \"simple\" config templating library"
 authors = [
-    { name = "squid1127", email = "120748767+squid1127@users.noreply.github.com." },
+    { name = "squid1127", email = "120748767+squid1127@users.noreply.github.com" },
 ]
 license = "MIT"
 readme = "README.md"
 requires-python = ">=3.11, <4.0"
+dependencies = [
+    "Jinja2>=3.1.0,<4.0.0",
+    "PyYAML>=6.0,<7.0",
+]
+
+[project.scripts]
+fishy-config = "fishy_config.cli:main"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
