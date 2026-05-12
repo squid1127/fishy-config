@@ -115,7 +115,17 @@ def create_app(
         """Render a config directory into a destination directory."""
 
         inline_context = _parse_key_values(context_kv)
-        file_context = _load_context_file(context_file) if context_file else {}
+
+        # Load context from file: explicit > config_dir/context.yaml
+        file_context = {}
+        if context_file:
+            file_context = _load_context_file(context_file)
+        else:
+            # Try to auto-load context.yaml from config directory
+            default_context_file = Path(config_dir) / "context.yaml"
+            if default_context_file.exists():
+                file_context = _load_context_file(default_context_file)
+
         context = merge_contexts(file_context, inline_context)
 
         # Use project config skip patterns if none provided
