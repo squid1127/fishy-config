@@ -1,0 +1,10 @@
+[project]
+name = "fish-config"
+version = "0.1.0"
+description = "A \"simple\" config templating library"
+authors = [
+    { name = "squid1127", email = "120748767+squid1127@users.noreply.github.com." },
+]
+license = "MIT"
+readme = "README.md"
+requires-python = ">=3.11, <4.0"
