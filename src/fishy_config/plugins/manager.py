@@ -46,6 +46,7 @@ class PluginManager:
                     src_path=src_path,
                     rel_path=rel_path,
                     dest_path=src_path,
+                    output_rel_path=rel_path,
                     context=context,
                     options=opts,
                 )

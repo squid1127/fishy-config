@@ -87,19 +87,10 @@ class RenderPipeline:
             dest_path: Destination path (will strip .j2)
         """
         try:
-            # Strip template extension from destination
-            dest_path = dest_path.with_suffix("")
-
-            # Skip if exists and not overwriting
-            if dest_path.exists() and not self.options.overwrite:
-                return
-
-            # Render template
-            logger.debug("Rendering template %s -> %s", rel_path, dest_path)
-
-            # Allow plugins to modify context before rendering
             ctx = self.options.context.data
             hook_ctx = None
+
+            # Allow plugins to modify context before rendering
             if getattr(self, "plugin_manager", None):
                 try:
                     try:
@@ -110,12 +101,26 @@ class RenderPipeline:
                         src_path=src_path,
                         rel_path=rel_path,
                         dest_path=dest_path,
+                        output_rel_path=rel_path,
                         context=ctx,
                         options=opts_copy,
                     )
                     ctx = self.plugin_manager.pre_render(hook_ctx)
                 except Exception:
                     logger.exception("plugin_manager.pre_render failed for %s", rel_path)
+
+            if hook_ctx is not None:
+                dest_path = self.options.dest_dir / hook_ctx.output_rel_path
+
+            # Strip template extension from destination
+            dest_path = dest_path.with_suffix("")
+
+            # Skip if exists and not overwriting
+            if dest_path.exists() and not self.options.overwrite:
+                return
+
+            # Render template
+            logger.debug("Rendering template %s -> %s", rel_path, dest_path)
 
             content = self.renderer.render_file(rel_path, ctx)
 
@@ -158,10 +163,7 @@ class RenderPipeline:
             rel_path: Relative path for logging
         """
         try:
-            # Skip if exists and not overwriting
-            if dest_path.exists() and not self.options.overwrite:
-                return
-
+            hook_ctx = None
             # Allow plugins to run pre-render/copy hooks (may adjust context)
             if getattr(self, "plugin_manager", None):
                 try:
@@ -173,12 +175,20 @@ class RenderPipeline:
                         src_path=src_path,
                         rel_path=rel_path,
                         dest_path=dest_path,
+                        output_rel_path=rel_path,
                         context=self.options.context.data,
                         options=opts_copy,
                     )
                     _ = self.plugin_manager.pre_render(hook_ctx)
                 except Exception:
                     logger.exception("plugin_manager.pre_render failed for copy %s", rel_path)
+
+            if hook_ctx is not None:
+                dest_path = self.options.dest_dir / hook_ctx.output_rel_path
+
+            # Skip if exists and not overwriting
+            if dest_path.exists() and not self.options.overwrite:
+                return
 
             if not self.options.dry_run:
                 # Ensure destination directory exists

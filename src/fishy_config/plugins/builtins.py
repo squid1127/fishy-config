@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import shutil
+from collections.abc import Callable
 from pathlib import Path
 from typing import Optional
 
@@ -26,8 +27,9 @@ class SkipIfContextMissingPlugin(BasePlugin):
 
     name = "skip_if_context_missing"
 
-    def __init__(self, key: str):
+    def __init__(self, key: str, path_prefix: str | Path | None = None):
         self.key = key
+        self.path_prefix = Path(path_prefix) if path_prefix is not None else None
 
     def _get(self, ctx: dict, key: str):
         parts = key.split(".")
@@ -38,20 +40,50 @@ class SkipIfContextMissingPlugin(BasePlugin):
             v = v[p]
         return v
 
-    def should_skip(self, src_path: Path, rel_path: Path, context: dict) -> bool:
-        # legacy signature supported: accept HookContext or raw params
-        if isinstance(src_path, HookContext):
-            ctx = src_path.context
-            rel = src_path.rel_path
-        else:
-            ctx = context
-            rel = rel_path
+    def should_skip(self, ctx: HookContext) -> bool:
+        if self.path_prefix is not None and not ctx.rel_path.is_relative_to(self.path_prefix):
+            return False
 
-        val = self._get(ctx, self.key)
+        val = self._get(ctx.context, self.key)
         skip = not bool(val)
         if skip:
-            logger.debug("Skipping %s because context key %s is missing/false", rel, self.key)
+            logger.debug(
+                "Skipping %s because context key %s is missing/false",
+                ctx.rel_path,
+                self.key,
+            )
         return skip
+
+
+class RewriteRelativePathPlugin(BasePlugin):
+    """Rewrite a rendered file's output-relative path when a source path matches.
+
+    This is useful for cases where a consumer wants one source file to land in a
+    different output location without subclassing the render pipeline.
+    """
+
+    name = "rewrite_relative_path"
+
+    def __init__(
+        self,
+        source_rel_path: str | Path,
+        rewrite_to: str | Path | Callable[[HookContext], str | Path],
+    ):
+        self.source_rel_path = Path(source_rel_path)
+        self.rewrite_to = rewrite_to
+
+    def _resolve_target(self, ctx: HookContext) -> Path:
+        if callable(self.rewrite_to):
+            return Path(self.rewrite_to(ctx))
+        return Path(self.rewrite_to)
+
+    def pre_render(self, ctx: HookContext) -> dict:
+        if ctx.rel_path == self.source_rel_path:
+            new_rel = self._resolve_target(ctx)
+            ctx.output_rel_path = new_rel
+            ctx.dest_path = ctx.options.dest_dir / new_rel
+            logger.debug("Rewriting output path for %s -> %s", ctx.rel_path, new_rel)
+        return super().pre_render(ctx)
 
 
 class ZipExporterPlugin(BasePlugin):

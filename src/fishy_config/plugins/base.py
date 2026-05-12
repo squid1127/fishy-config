@@ -18,6 +18,7 @@ class HookContext:
     src_path: Path
     rel_path: Path
     dest_path: Path
+    output_rel_path: Path
     context: dict
     options: RenderOptions
 
