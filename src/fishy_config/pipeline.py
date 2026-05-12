@@ -10,6 +10,7 @@ from .exceptions import FileIOError, TemplateRenderError
 from .loader import load_context
 from .models import RenderOptions, RenderResult
 from .renderer import Jinja2Renderer
+from .plugins.base import HookContext, PostRunContext
 from .log import get_logger
 
 logger = get_logger(__name__)
@@ -98,20 +99,30 @@ class RenderPipeline:
 
             # Allow plugins to modify context before rendering
             ctx = self.options.context.data
+            hook_ctx = None
             if getattr(self, "plugin_manager", None):
                 try:
-                    ctx = self.plugin_manager.pre_render(src_path, rel_path, dest_path, ctx)
+                    try:
+                        opts_copy = self.options.model_copy(deep=True)
+                    except Exception:
+                        opts_copy = self.options
+                    hook_ctx = HookContext(
+                        src_path=src_path,
+                        rel_path=rel_path,
+                        dest_path=dest_path,
+                        context=ctx,
+                        options=opts_copy,
+                    )
+                    ctx = self.plugin_manager.pre_render(hook_ctx)
                 except Exception:
                     logger.exception("plugin_manager.pre_render failed for %s", rel_path)
 
             content = self.renderer.render_file(rel_path, ctx)
 
             # Allow plugins to modify rendered content
-            if getattr(self, "plugin_manager", None):
+            if getattr(self, "plugin_manager", None) and hook_ctx is not None:
                 try:
-                    content = self.plugin_manager.post_render(
-                        src_path, rel_path, dest_path, content
-                    )
+                    content = self.plugin_manager.post_render(hook_ctx, content)
                 except Exception:
                     logger.exception("plugin_manager.post_render failed for %s", rel_path)
 
@@ -154,9 +165,18 @@ class RenderPipeline:
             # Allow plugins to run pre-render/copy hooks (may adjust context)
             if getattr(self, "plugin_manager", None):
                 try:
-                    _ = self.plugin_manager.pre_render(
-                        src_path, rel_path, dest_path, self.options.context.data
+                    try:
+                        opts_copy = self.options.model_copy(deep=True)
+                    except Exception:
+                        opts_copy = self.options
+                    hook_ctx = HookContext(
+                        src_path=src_path,
+                        rel_path=rel_path,
+                        dest_path=dest_path,
+                        context=self.options.context.data,
+                        options=opts_copy,
                     )
+                    _ = self.plugin_manager.pre_render(hook_ctx)
                 except Exception:
                     logger.exception("plugin_manager.pre_render failed for copy %s", rel_path)
 
@@ -248,7 +268,12 @@ class RenderPipeline:
             # Allow plugins to finalize and add artifacts
             try:
                 if getattr(self, "plugin_manager", None):
-                    self.plugin_manager.on_run_end(self.result)
+                    try:
+                        opts_copy = self.options.model_copy(deep=True)
+                    except Exception:
+                        opts_copy = self.options
+                    post_ctx = PostRunContext(options=opts_copy, result=self.result)
+                    self.plugin_manager.on_run_end(post_ctx)
             except Exception:
                 logger.exception("PluginManager on_run_end failed")
 

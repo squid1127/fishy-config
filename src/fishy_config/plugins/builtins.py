@@ -10,7 +10,7 @@ import shutil
 from pathlib import Path
 from typing import Optional
 
-from .base import BasePlugin
+from .base import BasePlugin, HookContext, PostRunContext
 from ..models import RenderResult, RenderOptions
 from ..log import get_logger
 
@@ -39,10 +39,18 @@ class SkipIfContextMissingPlugin(BasePlugin):
         return v
 
     def should_skip(self, src_path: Path, rel_path: Path, context: dict) -> bool:
-        val = self._get(context, self.key)
+        # legacy signature supported: accept HookContext or raw params
+        if isinstance(src_path, HookContext):
+            ctx = src_path.context
+            rel = src_path.rel_path
+        else:
+            ctx = context
+            rel = rel_path
+
+        val = self._get(ctx, self.key)
         skip = not bool(val)
         if skip:
-            logger.debug("Skipping %s because context key %s is missing/false", rel_path, self.key)
+            logger.debug("Skipping %s because context key %s is missing/false", rel, self.key)
         return skip
 
 
@@ -65,15 +73,13 @@ class ZipExporterPlugin(BasePlugin):
             archive_path = archive_path.with_suffix(".zip")
         return archive_path
 
-    def on_run_end(self, result: RenderResult) -> None:
+    def on_run_end(self, ctx: PostRunContext) -> None:
         try:
-            if result.dest_dir is None:
-                logger.warning(
-                    "ZipExporter: destination directory was not provided on RenderResult"
-                )
+            dest_dir = ctx.options.dest_dir
+            if dest_dir is None:
+                logger.warning("ZipExporter: destination directory not present on options")
                 return
 
-            dest_dir = result.dest_dir
             if not dest_dir.exists():
                 logger.warning("ZipExporter: destination directory does not exist: %s", dest_dir)
                 return
@@ -90,7 +96,7 @@ class ZipExporterPlugin(BasePlugin):
                     h.update(chunk)
             digest = h.hexdigest()
             artifact_info = f"{archive_path}:{digest}"
-            result.artifacts.append(artifact_info)
+            ctx.result.artifacts.append(artifact_info)
             logger.info("Zip created: %s (sha256=%s)", archive_path, digest)
         except Exception:
             logger.exception("ZipExporter failed")

@@ -18,7 +18,7 @@ from .loader import load_context
 from .models import ContextConfig, RenderOptions, RenderResult, RenderError
 from .pipeline import RenderPipeline
 from .log import configure_logging
-from .plugins.base import BasePlugin, Plugin as PluginProtocol
+from .plugins.base import BasePlugin, Plugin as PluginProtocol, HookContext, PostRunContext
 from .plugins.manager import PluginManager
 
 __all__ = [
@@ -40,6 +40,8 @@ __all__ = [
     "PluginProtocol",
     "BasePlugin",
     "PluginManager",
+    "HookContext",
+    "PostRunContext",
 ]
 
 
