@@ -58,6 +58,13 @@ class ZipExporterPlugin(BasePlugin):
     def __init__(self, archive_name: Optional[str] = None):
         self.archive_name = archive_name
 
+    def _resolve_archive_path(self, dest_dir: Path) -> Path:
+        archive_name = self.archive_name or dest_dir.name
+        archive_path = dest_dir.parent / archive_name
+        if archive_path.suffix != ".zip":
+            archive_path = archive_path.with_suffix(".zip")
+        return archive_path
+
     def on_run_end(self, result: RenderResult) -> None:
         try:
             if result.dest_dir is None:
@@ -71,8 +78,7 @@ class ZipExporterPlugin(BasePlugin):
                 logger.warning("ZipExporter: destination directory does not exist: %s", dest_dir)
                 return
 
-            archive_base = self.archive_name or f"{dest_dir.name}.zip"
-            archive_path = dest_dir.parent / archive_base
+            archive_path = self._resolve_archive_path(dest_dir)
 
             logger.info("Creating zip archive: %s (root=%s)", archive_path, dest_dir)
             shutil.make_archive(str(archive_path.with_suffix("")), "zip", root_dir=str(dest_dir))
