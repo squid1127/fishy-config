@@ -43,6 +43,7 @@ class RenderOptions(BaseModel):
     context: ContextConfig
     preserve_structure: bool = True
     skip_patterns: list[str] = Field(default_factory=lambda: ["*.md", ".git", ".gitkeep"])
+    plugins: list[Any] = Field(default_factory=list)
     strict_undefined: bool = False
     dry_run: bool = False
     template_extension: str = ".j2"
@@ -67,6 +68,7 @@ class RenderResult(BaseModel):
     errors: list[RenderError] = Field(default_factory=list)
     duration_ms: float = 0.0
     success: bool = True
+    artifacts: list[str] = Field(default_factory=list)
 
     @property
     def total_files(self) -> int:

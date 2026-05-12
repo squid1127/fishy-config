@@ -30,6 +30,7 @@ class RenderPipeline:
             strict_undefined=options.strict_undefined,
         )
         self.result = RenderResult()
+        self.plugin_manager = None
 
     def _should_skip(self, path: Path) -> bool:
         """Check if a file should be skipped based on skip patterns.
@@ -54,9 +55,17 @@ class RenderPipeline:
             file_path: Absolute path to file
             rel_path: Path relative to config_dir
         """
-        # Check if should skip
+        # Check if should skip (pattern-based)
         if self._should_skip(rel_path):
             return
+
+        # Plugin-based skip
+        if getattr(self, "plugin_manager", None):
+            try:
+                if self.plugin_manager.should_skip(file_path, rel_path, self.options.context.data):
+                    return
+            except Exception:
+                logger.exception("plugin_manager.should_skip failed for %s", rel_path)
 
         # Determine destination path
         dest_path = self.options.dest_dir / rel_path
@@ -86,7 +95,25 @@ class RenderPipeline:
 
             # Render template
             logger.debug("Rendering template %s -> %s", rel_path, dest_path)
-            content = self.renderer.render_file(rel_path, self.options.context.data)
+
+            # Allow plugins to modify context before rendering
+            ctx = self.options.context.data
+            if getattr(self, "plugin_manager", None):
+                try:
+                    ctx = self.plugin_manager.pre_render(src_path, rel_path, dest_path, ctx)
+                except Exception:
+                    logger.exception("plugin_manager.pre_render failed for %s", rel_path)
+
+            content = self.renderer.render_file(rel_path, ctx)
+
+            # Allow plugins to modify rendered content
+            if getattr(self, "plugin_manager", None):
+                try:
+                    content = self.plugin_manager.post_render(
+                        src_path, rel_path, dest_path, content
+                    )
+                except Exception:
+                    logger.exception("plugin_manager.post_render failed for %s", rel_path)
 
             if not self.options.dry_run:
                 # Ensure destination directory exists
@@ -123,6 +150,15 @@ class RenderPipeline:
             # Skip if exists and not overwriting
             if dest_path.exists() and not self.options.overwrite:
                 return
+
+            # Allow plugins to run pre-render/copy hooks (may adjust context)
+            if getattr(self, "plugin_manager", None):
+                try:
+                    _ = self.plugin_manager.pre_render(
+                        src_path, rel_path, dest_path, self.options.context.data
+                    )
+                except Exception:
+                    logger.exception("plugin_manager.pre_render failed for copy %s", rel_path)
 
             if not self.options.dry_run:
                 # Ensure destination directory exists
@@ -182,6 +218,15 @@ class RenderPipeline:
                 self.options.skip_patterns,
             )
 
+            # Initialize plugins
+            try:
+                from .plugins.manager import PluginManager
+
+                self.plugin_manager = PluginManager(self.options.plugins)
+                self.plugin_manager.on_run_start(self.options)
+            except Exception:
+                logger.exception("Failed to initialize PluginManager; continuing without plugins")
+
             for file_path in sorted(self.options.config_dir.rglob("*")):
                 if file_path.is_file():
                     # Get relative path
@@ -199,5 +244,12 @@ class RenderPipeline:
                 len(self.result.files_copied),
                 len(self.result.errors),
             )
+
+            # Allow plugins to finalize and add artifacts
+            try:
+                if getattr(self, "plugin_manager", None):
+                    self.plugin_manager.on_run_end(self.result)
+            except Exception:
+                logger.exception("PluginManager on_run_end failed")
 
         return self.result
