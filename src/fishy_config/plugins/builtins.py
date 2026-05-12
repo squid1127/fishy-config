@@ -59,40 +59,18 @@ class ZipExporterPlugin(BasePlugin):
         self.archive_name = archive_name
 
     def on_run_end(self, result: RenderResult) -> None:
-        # Attempt to locate destination dir from result paths (best-effort)
         try:
-            paths = list(result.files_rendered) + list(result.files_copied)
-            if not paths:
-                logger.warning("ZipExporter: no files found to create archive")
+            if result.dest_dir is None:
+                logger.warning(
+                    "ZipExporter: destination directory was not provided on RenderResult"
+                )
                 return
 
-            # Try to resolve at least one existing file path. Prefer absolute paths,
-            # fall back to resolving relative to CWD.
-            existing = []
-            for p in paths:
-                pth = Path(p)
-                if pth.exists():
-                    existing.append(pth.resolve())
-                    continue
-                # try relative to cwd
-                rel = Path.cwd() / p
-                if rel.exists():
-                    existing.append(rel.resolve())
-
-            if not existing:
-                logger.warning("ZipExporter: no existing output files found (checked absolute and CWD-relative paths)")
+            dest_dir = result.dest_dir
+            if not dest_dir.exists():
+                logger.warning("ZipExporter: destination directory does not exist: %s", dest_dir)
                 return
 
-            # Compute a common parent directory for all existing files
-            parents = [str(p.parent) for p in existing]
-            import os
-
-            common = Path(os.path.commonpath(parents))
-            if not common.exists():
-                logger.warning("ZipExporter: inferred common path does not exist: %s", common)
-                return
-
-            dest_dir = common
             archive_base = self.archive_name or f"{dest_dir.name}.zip"
             archive_path = dest_dir.parent / archive_base
 

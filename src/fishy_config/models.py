@@ -63,6 +63,8 @@ class RenderError(BaseModel):
 class RenderResult(BaseModel):
     """Result of a render operation."""
 
+    config_dir: Path | None = None
+    dest_dir: Path | None = None
     files_rendered: list[str] = Field(default_factory=list)
     files_copied: list[str] = Field(default_factory=list)
     errors: list[RenderError] = Field(default_factory=list)

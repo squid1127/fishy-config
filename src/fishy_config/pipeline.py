@@ -29,7 +29,7 @@ class RenderPipeline:
             options.config_dir,
             strict_undefined=options.strict_undefined,
         )
-        self.result = RenderResult()
+        self.result = RenderResult(config_dir=options.config_dir, dest_dir=options.dest_dir)
         self.plugin_manager = None
 
     def _should_skip(self, path: Path) -> bool:
