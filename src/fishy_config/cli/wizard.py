@@ -66,7 +66,7 @@ def register_wizard_command(
     ) -> None:
         """Interactively gather context and render config files."""
 
-        from ..tui import BuildSession, WizardSetup, build_field_specs, run_wizard_tui
+        from .tui import BuildSession, WizardSetup, build_field_specs, run_wizard_tui
 
         resolved_config_dir = config_dir or config.default_config_dir
         resolved_dest_dir = dest_dir or config.default_dest_dir

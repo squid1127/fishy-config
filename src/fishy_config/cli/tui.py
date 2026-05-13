@@ -13,7 +13,7 @@ from textual.containers import Horizontal, VerticalScroll
 from textual.screen import Screen
 from textual.widgets import Button, Footer, Header, Input, Static, Switch, TextArea
 
-from .wizard.wizard import (
+from .wizard import (
     field_examples,
     get_field_default,
     normalize_prompt_seed,
