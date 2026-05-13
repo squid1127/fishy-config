@@ -27,9 +27,9 @@ class SkipIfContextMissingPlugin(BasePlugin):
 
     name = "skip_if_context_missing"
 
-    def __init__(self, key: str, path_prefix: str | Path | None = None):
+    def __init__(self, key: str, path_prefix: str | Path):
         self.key = key
-        self.path_prefix = Path(path_prefix) if path_prefix is not None else None
+        self.path_prefix = Path(path_prefix)
 
     def _get(self, ctx: dict, key: str):
         parts = key.split(".")
@@ -41,7 +41,7 @@ class SkipIfContextMissingPlugin(BasePlugin):
         return v
 
     def should_skip(self, ctx: HookContext) -> bool:
-        if self.path_prefix is not None and not ctx.rel_path.is_relative_to(self.path_prefix):
+        if not ctx.rel_path.is_relative_to(self.path_prefix):
             return False
 
         val = self._get(ctx.context, self.key)
@@ -68,9 +68,11 @@ class RewriteRelativePathPlugin(BasePlugin):
         self,
         source_rel_path: str | Path,
         rewrite_to: str | Path | Callable[[HookContext], str | Path],
+        recursive: bool = False,
     ):
         self.source_rel_path = Path(source_rel_path)
         self.rewrite_to = rewrite_to
+        self.recursive = recursive
 
     def _resolve_target(self, ctx: HookContext) -> Path:
         if callable(self.rewrite_to):
@@ -78,11 +80,19 @@ class RewriteRelativePathPlugin(BasePlugin):
         return Path(self.rewrite_to)
 
     def pre_render(self, ctx: HookContext) -> dict:
-        if ctx.rel_path == self.source_rel_path:
-            new_rel = self._resolve_target(ctx)
-            ctx.output_rel_path = new_rel
-            ctx.dest_path = ctx.options.dest_dir / new_rel
-            logger.debug("Rewriting output path for %s -> %s", ctx.rel_path, new_rel)
+        if self.recursive:
+            if ctx.rel_path.is_relative_to(self.source_rel_path):
+                relative_suffix = ctx.rel_path.relative_to(self.source_rel_path)
+                new_rel = self._resolve_target(ctx) / relative_suffix
+                ctx.output_rel_path = new_rel
+                ctx.dest_path = ctx.options.dest_dir / new_rel
+                logger.debug("Rewriting output path for %s -> %s", ctx.rel_path, new_rel)
+        else:
+            if ctx.rel_path == self.source_rel_path:
+                new_rel = self._resolve_target(ctx)
+                ctx.output_rel_path = new_rel
+                ctx.dest_path = ctx.options.dest_dir / new_rel
+                logger.debug("Rewriting output path for %s -> %s", ctx.rel_path, new_rel)
         return super().pre_render(ctx)
 
 
