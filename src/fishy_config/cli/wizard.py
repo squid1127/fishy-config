@@ -10,9 +10,9 @@ import typer
 from pydantic import BaseModel, ValidationError
 import yaml
 
-from ...loader import load_yaml_file, merge_contexts
-from ...models import RenderRequest
-from ...project import ProjectConfig
+from ..loader import load_yaml_file, merge_contexts
+from ..models import RenderRequest
+from ..project import ProjectConfig
 
 
 def register_wizard_command(

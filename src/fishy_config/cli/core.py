@@ -12,7 +12,7 @@ from pydantic import BaseModel, ValidationError
 from .. import __version__, configure_logging
 from ..loader import load_yaml_file, merge_contexts
 from ..models import RenderRequest
-from .wizard.wizard import register_wizard_command
+from .wizard import register_wizard_command
 from ..project import ProjectConfig
 
 RenderCallable = Callable[[RenderRequest], Any]
