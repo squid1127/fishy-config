@@ -228,6 +228,8 @@ def normalize_prompt_seed(value: Any) -> Any:
 
 
 def stringify_default(value: Any) -> str:
+    if value is None:
+        return "null"
     if isinstance(value, Path):
         return str(value)
     if isinstance(value, (dict, list, tuple, set)):
