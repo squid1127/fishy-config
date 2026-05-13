@@ -103,8 +103,6 @@ app = create_app(project_config=config)
 
 ## Disclaimer
 
-This is a personal project, and is not intended for production use. (I say this in every one of my repos lol)
-
-## How much of it is vibe coded?
-
-Most of it lol.
+- This is a personal project, and is not intended for production use. (I say this in every one of my repos lol)
+- This project was largely vibe coded :)
+- This project will probably not be maintained, and may be replaced with a different solution in the future.
