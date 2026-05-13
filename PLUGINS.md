@@ -23,18 +23,50 @@ Built-in plugins are provided in `fishy_config.plugins.builtins`:
 - `ZipExporterPlugin(archive_name: Optional[str])` — zips the output directory
   (best-effort) and appends `path:sha256` to `RenderResult.artifacts`.
 
-How to enable plugins
+## How to Enable Plugins
 
-1. High-level `render()` call
+**1. High-level `render()` API**
+
+Pass plugin instances via the `plugins` field on `RenderRequest`:
 
 ```python
-from fishy_config import render
+from fishy_config import render, RenderRequest
 from fishy_config.plugins.builtins import ZipExporterPlugin
 
-result = render("config", "out", context={}, plugins=[ZipExporterPlugin()])
+result = render(
+  RenderRequest(
+    config_dir="config",
+    dest_dir="out",
+    context={},
+    plugins=[ZipExporterPlugin("app.zip")],
+  )
+)
 ```
 
-2. Direct `RenderPipeline`
+**2. Wrapper projects (CLI with custom defaults)**
+
+Define a `plugin_factory` function in `ProjectConfig` to create plugins based on validated context:
+
+```python
+from fishy_config import create_app, ProjectConfig
+from fishy_config.plugins.builtins import SkipIfContextMissingPlugin, ZipExporterPlugin
+
+def create_plugins(context):
+    # context is already validated if you provide a context_model
+    return [
+        SkipIfContextMissingPlugin("music.enabled"),
+        ZipExporterPlugin("release.zip"),
+    ]
+
+project_config = ProjectConfig(
+    name="my-app",
+    plugin_factory=create_plugins,  # called automatically by CLI
+)
+
+app = create_app(project_config=project_config)
+```
+
+**3. Direct pipeline (advanced)**
 
 ```python
 from fishy_config import RenderPipeline, RenderOptions
@@ -54,38 +86,50 @@ p = RenderPipeline(options)
 res = p.run()
 ```
 
-Writing your own plugin
+## Writing Your Own Plugin
 
-Subclass `BasePlugin` and override the hooks you need. Keep plugins small and
-focused — they should not perform destructive file operations without
-explicit consent (e.g., via options).
+Subclass `BasePlugin` and override the hooks you need. Keep plugins small and focused — they should not perform destructive file operations without explicit consent.
 
-Example skeleton
+**Example:**
 
 ```python
 from fishy_config.plugins.base import BasePlugin
+from pathlib import Path
 
 class MyPlugin(BasePlugin):
     name = "my_plugin"
 
-    def should_skip(self, src_path, rel_path, context):
-        # decide whether to skip
+    def should_skip(self, src_path: Path, rel_path: Path, context: dict) -> bool:
+        # return True to skip processing this file
         return False
 
-    def post_render(self, src_path, rel_path, dest_path, rendered):
-        # modify and return content
+    def post_render(self, src_path: Path, rel_path: Path, dest_path: Path, rendered: str) -> str:
+        # optionally modify rendered content before writing
         return rendered.replace("SECRET", "REDACTED")
 
     def on_run_end(self, result):
-        # append artifact or cleanup
-        result.artifacts.append("my-plugin:done")
+        # perform post-render actions (e.g., export artifacts)
+        result.artifacts.append("my-plugin:success")
 ```
 
-Notes
+Then use in your wrapper project:
+
+```python
+from fishy_config import create_app, ProjectConfig
+from .plugins import MyPlugin
+
+def create_plugins(context):
+    return [MyPlugin()]
+
+config = ProjectConfig(
+    name="my-app",
+    plugin_factory=create_plugins,
+)
+
+app = create_app(project_config=config)
+```
+
+## Notes
 
 - Plugins are executed in the order they are provided.
-- Exceptions in plugin methods are caught and logged; they will not stop the
-  pipeline but may add errors to the `RenderResult` in future iterations.
-- The `ZipExporterPlugin` is best-effort: it attempts to infer the dest
-  directory from rendered/copied file paths. For reliable behavior, ensure
-  `dest_dir` contains output before running the plugin.
+- Exceptions in plugin methods are caught and logged; they will not stop the pipeline.
