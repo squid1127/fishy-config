@@ -11,17 +11,14 @@ from pydantic import BaseModel, ValidationError
 
 from . import __version__, configure_logging
 from .loader import load_yaml_file, merge_contexts
-from .plugins.discovery import resolve_plugins
+from .models import RenderRequest
 from .project import ProjectConfig
-from .exceptions import ConfigValidationError
 
-RenderCallable = Callable[..., Any]
-PluginResolver = Callable[..., list[Any]]
+RenderCallable = Callable[[RenderRequest], Any]
 
 
 def create_app(
     render_fn: RenderCallable | None = None,
-    plugin_resolver: PluginResolver = resolve_plugins,
     project_config: ProjectConfig | None = None,
     *,
     help_text: str | None = None,
@@ -29,12 +26,11 @@ def create_app(
     """Build a CLI app around a render function.
 
     External projects can reuse this factory and provide their own render
-    callable and/or plugin resolver while keeping the same command interface.
+    callable while keeping the same command interface.
 
     Args:
         render_fn: The render function to call (defaults to fishy_config.render)
-        plugin_resolver: Function to resolve plugin paths
-        project_config: Optional ProjectConfig with defaults and metadata
+        project_config: Optional ProjectConfig with defaults, plugins, and metadata
         help_text: Override help text (uses project_config.help_text if not provided)
     """
 
@@ -53,14 +49,16 @@ def create_app(
     def main(
         ctx: typer.Context,
         verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable debug logging."),
-        version: bool = typer.Option(False, "--version", help="Show version and exit."),
     ) -> None:
-        if version:
-            typer.echo(__version__)
-            raise typer.Exit()
 
         configure_logging(level=logging.DEBUG if verbose else logging.INFO)
         ctx.ensure_object(dict)
+        
+    @app.command(name="version")
+    def version_command() -> None:
+        """Show version info."""
+        typer.echo(f"fishy-config {__version__}")
+        raise typer.Exit(code=0)
 
     @app.command(name="render")
     def render_command(
@@ -90,27 +88,19 @@ def create_app(
             "--context",
             help="Inline context values as key=value. Can be repeated.",
         ),
-        plugin: list[str] = typer.Option(
-            [],
-            "--plugin",
-            help="Plugin import path (module:Class or module.function). Can be repeated.",
-        ),
-        discover_plugins: bool = typer.Option(
-            False,
-            "--discover-plugins/--no-discover-plugins",
-            help="Load plugins from the fishy_config.plugins entry point group.",
-        ),
         strict_undefined: bool = typer.Option(False, help="Fail on undefined template variables."),
         dry_run: bool = typer.Option(False, help="Simulate without writing files."),
-        overwrite: bool = typer.Option(False, help="Overwrite existing output files."),
-        skip_patterns: list[str] = typer.Option([], "--skip", help="Skip patterns to apply."),
-        local_export_dir: Path | None = typer.Option(
+        overwrite: bool | None = typer.Option(
             None,
-            "--local-export-dir",
-            file_okay=False,
-            dir_okay=True,
-            help="Directory to copy artifacts to (requires artifact-generating plugins).",
+            "--overwrite/--no-overwrite",
+            help="Overwrite existing output files. If not specified, uses project default.",
         ),
+        clean_dest: bool = typer.Option(
+            False,
+            "--clean-dest",
+            help="Delete destination directory contents before rendering.",
+        ),
+        skip_patterns: list[str] = typer.Option([], "--skip", help="Skip patterns to apply."),
     ) -> None:
         """Render a config directory into a destination directory."""
 
@@ -128,8 +118,10 @@ def create_app(
 
         context = merge_contexts(file_context, inline_context)
 
-        # Use project config skip patterns if none provided
-        final_skip_patterns = skip_patterns if skip_patterns else config.skip_patterns
+        # Deterministic skip precedence: project defaults first, CLI additions second.
+        final_skip_patterns: list[str] | None = None
+        if config.skip_patterns or skip_patterns:
+            final_skip_patterns = [*config.skip_patterns, *skip_patterns]
 
         # Validate and optionally cast context
         typed_context = None
@@ -144,35 +136,33 @@ def create_app(
                 raise typer.Exit(code=1)
 
         # Generate plugins from factory if available
-        custom_plugins = []
+        plugins = []
         if config.plugin_factory:
             try:
-                custom_plugins = config.plugin_factory(typed_context or context)
+                plugins = config.plugin_factory(typed_context or context)
             except Exception as exc:
                 typer.echo(f"Plugin factory failed: {exc}", err=True)
                 raise typer.Exit(code=1)
 
-        # Merge CLI-specified plugins with factory plugins
-        resolved_plugins = plugin_resolver(plugin, discover=discover_plugins)
-        all_plugins = custom_plugins + resolved_plugins
+        # Determine overwrite: CLI flag takes precedence, then project default
+        final_overwrite = overwrite if overwrite is not None else config.default_overwrite
 
-        # Handle local export dir if provided
-        if local_export_dir:
-            from .plugins.builtins import CopyArtifactPlugin
-
-            all_plugins.append(CopyArtifactPlugin(local_export_dir))
-
-        result = render_fn(
+        request = RenderRequest(
             config_dir=config_dir,
             dest_dir=dest_dir,
             context=context,
+            context_model_type=config.context_model,
             typed_context=typed_context,
-            plugins=all_plugins,
+            plugins=plugins,
             skip_patterns=final_skip_patterns,
+            template_extension=config.template_extension,
             strict_undefined=strict_undefined,
             dry_run=dry_run,
-            overwrite=overwrite,
+            overwrite=final_overwrite,
+            clean_dest=clean_dest,
         )
+
+        result = render_fn(request)
 
         if result.success:
             typer.echo(f"Rendered {result.total_files} files")

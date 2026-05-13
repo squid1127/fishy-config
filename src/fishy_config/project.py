@@ -8,6 +8,8 @@ from typing import Callable, Type
 
 from pydantic import BaseModel
 
+from .models import DEFAULT_SKIP_PATTERNS
+
 
 @dataclass
 class ProjectConfig:
@@ -35,7 +37,7 @@ class ProjectConfig:
     Signature: (context: dict | BaseModel) -> list[BasePlugin]
     """
 
-    skip_patterns: list[str] = field(default_factory=list)
+    skip_patterns: list[str] = field(default_factory=lambda: DEFAULT_SKIP_PATTERNS.copy())
     """Default skip patterns for rendering."""
 
     template_extension: str = ".j2"
@@ -43,3 +45,6 @@ class ProjectConfig:
 
     help_text: str = "Render templated config."
     """CLI help text."""
+
+    default_overwrite: bool = True
+    """Overwrite destination files by default (set to False to preserve existing)."""

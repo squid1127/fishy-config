@@ -164,6 +164,6 @@ class CopyArtifactPlugin(BasePlugin):
             dest_path = self.output_dir / archive.name
             logger.debug("Copying artifact %s -> %s", archive, dest_path)
             shutil.copy2(archive, dest_path)
-            logger.debug("Copied artifact to %s", dest_path)
+            logger.info("Copied artifact to %s", dest_path)
         except Exception:
             logger.exception("CopyArtifact failed")

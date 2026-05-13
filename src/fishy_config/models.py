@@ -6,6 +6,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+DEFAULT_SKIP_PATTERNS = ["*.md", ".git", ".gitkeep"]
+
 
 class MergeStrategy(str, Enum):
     """Strategy for merging context sources."""
@@ -33,6 +35,26 @@ class ContextConfig(BaseModel):
     metadata: dict[str, str] = Field(default_factory=dict)
 
 
+class RenderRequest(BaseModel):
+    """Canonical request payload for high-level rendering."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    config_dir: Path
+    dest_dir: Path
+    context: dict[str, Any] = Field(default_factory=dict)
+    typed_context: BaseModel | None = None
+    context_model_type: type[BaseModel] | None = None
+    plugins: list[Any] = Field(default_factory=list)
+    preserve_structure: bool = True
+    skip_patterns: list[str] | None = None
+    template_extension: str = ".j2"
+    strict_undefined: bool = False
+    dry_run: bool = False
+    overwrite: bool = False
+    clean_dest: bool = False
+
+
 class RenderOptions(BaseModel):
     """Configuration for rendering operation."""
 
@@ -44,7 +66,7 @@ class RenderOptions(BaseModel):
     context_type: type[BaseModel] | None = None
     typed_context: BaseModel | None = None
     preserve_structure: bool = True
-    skip_patterns: list[str] = Field(default_factory=lambda: ["*.md", ".git", ".gitkeep"])
+    skip_patterns: list[str] = Field(default_factory=lambda: DEFAULT_SKIP_PATTERNS.copy())
     plugins: list[Any] = Field(default_factory=list)
     strict_undefined: bool = False
     dry_run: bool = False

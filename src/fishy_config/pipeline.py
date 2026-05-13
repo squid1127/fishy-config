@@ -79,7 +79,10 @@ class RenderPipeline:
                 logger.exception("plugin_manager.should_skip failed for %s", rel_path)
 
         # Determine destination path
-        dest_path = self.options.dest_dir / rel_path
+        if self.options.preserve_structure:
+            dest_path = self.options.dest_dir / rel_path
+        else:
+            dest_path = self.options.dest_dir / rel_path.name
 
         # Handle template files (.j2)
         if file_path.suffix == self.options.template_extension:

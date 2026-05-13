@@ -5,8 +5,6 @@ __version__ = "0.1.0"
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel
-
 from .exceptions import (
     ConfigValidationError,
     ContextLoadError,
@@ -17,7 +15,7 @@ from .exceptions import (
     TemplateRenderError,
 )
 from .loader import load_context
-from .models import ContextConfig, RenderOptions, RenderResult, RenderError
+from .models import ContextConfig, RenderOptions, RenderResult, RenderError, RenderRequest
 from .pipeline import RenderPipeline
 from .log import configure_logging
 from .project import ProjectConfig
@@ -38,6 +36,7 @@ __all__ = [
     "RenderPipeline",
     "ProjectConfig",
     "ContextConfig",
+    "RenderRequest",
     "RenderOptions",
     "RenderResult",
     "RenderError",
@@ -62,35 +61,15 @@ __all__ = [
 
 
 def render(
-    config_dir: str | Path,
-    dest_dir: str | Path,
-    context: dict[str, Any] | None = None,
-    typed_context: BaseModel | None = None,
-    context_model_type: type[BaseModel] | None = None,
-    plugins: list[Any] | None = None,
-    *,
-    preserve_structure: bool = True,
-    skip_patterns: list[str] | None = None,
-    strict_undefined: bool = False,
-    dry_run: bool = False,
-    overwrite: bool = False,
+    request: RenderRequest,
 ) -> RenderResult:
-    """High-level API for rendering config templates.
+    """High-level API for rendering config templates from a unified request model.
 
     Renders all templates (.j2 files) and copies other files from config_dir
     to dest_dir, using provided context for template variable substitution.
 
     Args:
-        config_dir: Source directory containing templates and config files
-        dest_dir: Destination directory for rendered output
-        context: Context dict for template rendering; overrides context.yaml
-        typed_context: Optional validated context model instance from the consumer
-        context_model_type: Optional consumer model class to validate context against
-        preserve_structure: If True, preserve directory structure from config_dir
-        skip_patterns: List of gitignore-style patterns for files to skip
-        strict_undefined: If True, fail on undefined template variables
-        dry_run: If True, don't write files, only simulate
-        overwrite: If True, overwrite existing files in destination
+        request: Canonical render request containing directories, context, plugins, and options.
 
     Returns:
         RenderResult with files processed and any errors
@@ -99,25 +78,34 @@ def render(
         ContextLoadError: If context cannot be loaded
         FishyConfigError: For other errors during rendering
     """
-    config_dir = Path(config_dir)
-    dest_dir = Path(dest_dir)
+    config_dir = Path(request.config_dir)
+    dest_dir = Path(request.dest_dir)
 
     # Load context (from YAML + runtime override)
-    ctx = load_context(config_dir, context)
+    ctx = load_context(config_dir, request.context)
 
     # Create render options
+    options_kwargs: dict[str, Any] = {
+        "config_dir": config_dir,
+        "dest_dir": dest_dir,
+        "context": ctx,
+        "context_type": request.context_model_type,
+        "typed_context": request.typed_context,
+        "preserve_structure": request.preserve_structure,
+        "plugins": request.plugins,
+        "template_extension": request.template_extension,
+        "strict_undefined": request.strict_undefined,
+        "dry_run": request.dry_run,
+        "overwrite": request.overwrite,
+        "clean_dest": request.clean_dest,
+    }
+
+    # Keep model defaults when caller does not provide an override.
+    if request.skip_patterns is not None:
+        options_kwargs["skip_patterns"] = request.skip_patterns
+
     options = RenderOptions(
-        config_dir=config_dir,
-        dest_dir=dest_dir,
-        context=ctx,
-        context_type=context_model_type,
-        typed_context=typed_context,
-        preserve_structure=preserve_structure,
-        skip_patterns=skip_patterns or [],
-        plugins=plugins or [],
-        strict_undefined=strict_undefined,
-        dry_run=dry_run,
-        overwrite=overwrite,
+        **options_kwargs,
     )
 
     # Execute pipeline
