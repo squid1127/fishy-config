@@ -48,3 +48,6 @@ class ProjectConfig:
 
     default_overwrite: bool = True
     """Overwrite destination files by default (set to False to preserve existing)."""
+
+    default_clean_dest: bool = False
+    """Delete destination directory before rendering by default."""

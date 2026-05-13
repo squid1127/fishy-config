@@ -53,7 +53,7 @@ def create_app(
 
         configure_logging(level=logging.DEBUG if verbose else logging.INFO)
         ctx.ensure_object(dict)
-        
+
     @app.command(name="version")
     def version_command() -> None:
         """Show version info."""
@@ -95,10 +95,10 @@ def create_app(
             "--overwrite/--no-overwrite",
             help="Overwrite existing output files. If not specified, uses project default.",
         ),
-        clean_dest: bool = typer.Option(
-            False,
-            "--clean-dest",
-            help="Delete destination directory contents before rendering.",
+        clean_dest: bool | None = typer.Option(
+            None,
+            "--clean-dest/--no-clean-dest",
+            help="Delete destination directory before rendering. If not specified, uses project default.",
         ),
         skip_patterns: list[str] = typer.Option([], "--skip", help="Skip patterns to apply."),
     ) -> None:
@@ -147,6 +147,9 @@ def create_app(
         # Determine overwrite: CLI flag takes precedence, then project default
         final_overwrite = overwrite if overwrite is not None else config.default_overwrite
 
+        # Determine clean_dest: CLI flag takes precedence, then project default
+        final_clean_dest = clean_dest if clean_dest is not None else config.default_clean_dest
+
         request = RenderRequest(
             config_dir=config_dir,
             dest_dir=dest_dir,
@@ -159,7 +162,7 @@ def create_app(
             strict_undefined=strict_undefined,
             dry_run=dry_run,
             overwrite=final_overwrite,
-            clean_dest=clean_dest,
+            clean_dest=final_clean_dest,
         )
 
         result = render_fn(request)

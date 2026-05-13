@@ -153,3 +153,47 @@ def test_cli_overwrite_flag_overrides_project_default(tmp_path):
 
     assert result.exit_code == 0
     assert calls["request"].overwrite is True
+
+
+def test_cli_uses_project_default_clean_dest(tmp_path):
+    config_dir = tmp_path / "config"
+    dest_dir = tmp_path / "out"
+    config_dir.mkdir()
+
+    calls = {}
+
+    def fake_render(request):
+        calls["request"] = request
+        return SimpleNamespace(success=True, total_files=0, errors=[], artifacts=[])
+
+    app = create_app(
+        render_fn=fake_render,
+        project_config=ProjectConfig(name="demo", default_clean_dest=True),
+    )
+
+    result = runner.invoke(app, ["render", str(config_dir), str(dest_dir)])
+
+    assert result.exit_code == 0
+    assert calls["request"].clean_dest is True
+
+
+def test_cli_clean_dest_flag_overrides_project_default(tmp_path):
+    config_dir = tmp_path / "config"
+    dest_dir = tmp_path / "out"
+    config_dir.mkdir()
+
+    calls = {}
+
+    def fake_render(request):
+        calls["request"] = request
+        return SimpleNamespace(success=True, total_files=0, errors=[], artifacts=[])
+
+    app = create_app(
+        render_fn=fake_render,
+        project_config=ProjectConfig(name="demo", default_clean_dest=False),
+    )
+
+    result = runner.invoke(app, ["render", str(config_dir), str(dest_dir), "--clean-dest"])
+
+    assert result.exit_code == 0
+    assert calls["request"].clean_dest is True
