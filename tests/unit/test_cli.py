@@ -2,12 +2,19 @@
 
 from types import SimpleNamespace
 
+from pydantic import BaseModel, Field
 from typer.testing import CliRunner
 
-from fishy_config.cli import create_app
+from fishy_config.cli.core import create_app
 from fishy_config.project import ProjectConfig
+from fishy_config.cli.tui import WizardResult
 
 runner = CliRunner()
+
+
+class WizardContext(BaseModel):
+    name: str = Field(default="Fishy", description="Project name", examples=["demo-app"])
+    replicas: int = Field(default=2, description="Replica count")
 
 
 def test_cli_uses_project_plugin_factory(tmp_path):
@@ -197,3 +204,57 @@ def test_cli_clean_dest_flag_overrides_project_default(tmp_path):
 
     assert result.exit_code == 0
     assert calls["request"].clean_dest is True
+
+
+def test_cli_wizard_uses_project_defaults_and_renders(tmp_path, monkeypatch):
+    config_dir = tmp_path / "config"
+    dest_dir = tmp_path / "out"
+    config_dir.mkdir()
+
+    calls = {}
+
+    def fake_render(request):
+        calls["request"] = request
+        return SimpleNamespace(success=True, total_files=0, errors=[], artifacts=[])
+
+    def fake_run_wizard_tui(session):
+        return WizardResult(
+            config_dir=config_dir,
+            dest_dir=dest_dir,
+            context={"name": "Fishy", "replicas": 2},
+            strict_undefined=False,
+            dry_run=False,
+            overwrite=True,
+            clean_dest=False,
+            skip_patterns=[],
+        )
+
+    app = create_app(
+        render_fn=fake_render,
+        project_config=ProjectConfig(
+            name="demo",
+            context_model=WizardContext,
+            default_config_dir=config_dir,
+            default_dest_dir=dest_dir,
+            wizard_enabled=True,
+        ),
+    )
+
+    monkeypatch.setattr("fishy_config.wizard_tui.run_wizard_tui", fake_run_wizard_tui)
+    result = runner.invoke(app, ["wizard"])
+
+    assert result.exit_code == 0
+    assert calls["request"].config_dir == config_dir
+    assert calls["request"].dest_dir == dest_dir
+    assert calls["request"].context["name"] == "Fishy"
+    assert calls["request"].typed_context.name == "Fishy"
+    assert calls["request"].typed_context.replicas == 2
+
+
+def test_cli_wizard_is_omitted_when_disabled():
+    app = create_app(project_config=ProjectConfig(name="demo"))
+
+    result = runner.invoke(app, ["wizard"])
+
+    assert result.exit_code != 0
+    assert "No such command" in result.output

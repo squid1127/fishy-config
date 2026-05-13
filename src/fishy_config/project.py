@@ -46,6 +46,9 @@ class ProjectConfig:
     help_text: str = "Render templated config."
     """CLI help text."""
 
+    wizard_enabled: bool = False
+    """Expose the interactive wizard command for this project."""
+
     default_overwrite: bool = True
     """Overwrite destination files by default (set to False to preserve existing)."""
 

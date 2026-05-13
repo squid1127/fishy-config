@@ -9,13 +9,13 @@ import logging
 import typer
 from pydantic import BaseModel, ValidationError
 
-from . import __version__, configure_logging
-from .loader import load_yaml_file, merge_contexts
-from .models import RenderRequest
-from .project import ProjectConfig
+from .. import __version__, configure_logging
+from ..loader import load_yaml_file, merge_contexts
+from ..models import RenderRequest
+from .wizard.wizard import register_wizard_command
+from ..project import ProjectConfig
 
 RenderCallable = Callable[[RenderRequest], Any]
-
 
 def create_app(
     render_fn: RenderCallable | None = None,
@@ -36,7 +36,7 @@ def create_app(
 
     # Late import to avoid circular import
     if render_fn is None:
-        from . import render
+        from .. import render
 
         render_fn = render
 
@@ -168,18 +168,22 @@ def create_app(
         result = render_fn(request)
 
         if result.success:
+            typer.echo("\nSuccess!")
             typer.echo(f"Rendered {result.total_files} files")
             if getattr(result, "artifacts", None):
                 for artifact in result.artifacts:
-                    typer.echo(f"artifact: {artifact}")
+                    typer.echo(f"Artifact: {artifact}")
             raise typer.Exit(code=0)
 
+        typer.echo("\nErrors occurred during rendering:", err=True)
         for error in result.errors:
             typer.echo(f"{error.file}: {error.message}", err=True)
         raise typer.Exit(code=1)
 
-    return app
+    if config.wizard_enabled:
+        register_wizard_command(app, render_fn, config)
 
+    return app
 
 def _parse_key_values(values: list[str]) -> dict[str, Any]:
     parsed: dict[str, Any] = {}
