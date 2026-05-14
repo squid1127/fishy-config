@@ -2,7 +2,7 @@
 [project]
 name = "fishy-config"
 version = "0.1.0"
-description = "A \"simple\" config templating library"
+description = "A fishy python tool to make managing config files easier using a simple templating system."
 authors = [
     { name = "squid1127", email = "120748767+squid1127@users.noreply.github.com" },
 ]
@@ -19,7 +19,6 @@ fishy-config = "fishy_config.cli:app"
 
 [tool.poetry.dependencies]
 python = ">=3.11,<4.0"
-typer = { extras = ["all"], version = "^0.25.1" }
 pydantic = "^2.13.4"
 jinja2 = "^3.1"
 pyyaml = "^6.0"
