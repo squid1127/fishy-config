@@ -1,6 +1,6 @@
 """Enums used across the project."""
 
-from enum import Enum, IntEnum, auto
+from enum import Enum, auto
 
 class FileType(Enum):
     """Enum representing different types of files."""
@@ -11,6 +11,6 @@ class FileType(Enum):
     
 class ArtifactType(Enum):
     """Enum representing different types of build artifacts."""
-    ZIP_ARCHIVE = auto()
-    DIRECTORY = auto()
-    CUSTOM_BUILDER = auto()
+    ZIP_ARCHIVE = "zip"
+    DIRECTORY = "directory"
+    CUSTOM_BUILDER = "custom_builder"

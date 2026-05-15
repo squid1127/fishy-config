@@ -29,6 +29,10 @@ class ArtifactGenerator:
             try:
                 if artifact.artifact_type == ArtifactType.CUSTOM_BUILDER:
                     yield self._run_custom_builder(artifact)
+                elif artifact.artifact_type == ArtifactType.ZIP_ARCHIVE:
+                    yield self._generate_zip(artifact)
+                elif artifact.artifact_type == ArtifactType.DIRECTORY:
+                    yield self._copy_directory(artifact)
                 else:
                     logger.warning(
                         f"Unsupported artifact type {artifact.artifact_type} for artifact at {artifact.path}"

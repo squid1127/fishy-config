@@ -137,6 +137,42 @@ class FishyConfigCLI:
         self.console.print(
             f"[bold green]Successfully generated {len([r for r in results if not r.error])} files.[/bold green]"
         )
+        
+        artifact_generator = ArtifactGenerator(engine_config, renderer)
+        artifact_results = []
+        with self.console.status("[bold green]Generating artifacts...[/bold green]") as status:
+            for artifact_result in artifact_generator.generate_artifacts(engine_config.artifacts):
+                artifact_results.append(artifact_result)
+                if artifact_result.error:
+                    logger.error(
+                        f"Error generating artifact {artifact_result.artifact.path}: {artifact_result.error}"
+                    )
+                    self.console.print(
+                        f"[red]Error generating artifact {artifact_result.artifact.path}: {artifact_result.error}[/red]"
+                    )
+                else:
+                    logger.debug(
+                        f"Successfully generated artifact {artifact_result.artifact.path} -> {artifact_result.generated_path}"
+                    )
+                    status.update(
+                        f"[blue]({len(artifact_results)}/{len(engine_config.artifacts)})[/blue] [green]Generated artifact {artifact_result.generated_path}[/green]"
+                    )
+        
+        self.console.print(
+            f"[bold green]Successfully generated {len([a for a in artifact_results if not a.error])} artifacts.[/bold green]"
+        )
+        
+        self.console.print("[bold green]Build process completed successfully.[/bold green]")
+        self.console.print(f"[bold blue]Output directory: {engine_config.output_dir}[/bold blue]")
+        for artifact_result in artifact_results:
+            if artifact_result.error:
+                self.console.print(
+                    f"[red]- Artifact: {artifact_result.artifact.path} failed with error: {artifact_result.error}[/red]"
+                )
+            else:
+                self.console.print(
+                    f"[green]- Artifact: {artifact_result.generated_path}[/green]"
+                )
 
     def _apply_build_config_to_context(self) -> None:
         """Apply the build configuration to the context manager."""
