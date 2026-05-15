@@ -9,7 +9,12 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-_ROOT_NAME = "fishy_config"
+try:
+    from rich.logging import RichHandler
+except ImportError:  # pragma: no cover - fallback when rich isn't installed
+    RichHandler = None  # type: ignore[assignment]
+
+from .models.constants import PACKAGE_NAME
 
 
 def get_logger(name: Optional[str] = None) -> logging.Logger:
@@ -18,8 +23,8 @@ def get_logger(name: Optional[str] = None) -> logging.Logger:
     Use `configure_logging` to adjust global logging behavior.
     """
     if name:
-        return logging.getLogger(f"{_ROOT_NAME}.{name}")
-    return logging.getLogger(_ROOT_NAME)
+        return logging.getLogger(f"{PACKAGE_NAME}.{name}")
+    return logging.getLogger(PACKAGE_NAME)
 
 
 def configure_logging(level: int = logging.INFO, *, enable: bool = True) -> None:
@@ -35,16 +40,30 @@ def configure_logging(level: int = logging.INFO, *, enable: bool = True) -> None
         logging.disable(logging.CRITICAL)
         return
 
-    # Re-enable and set up a minimal configuration if none existed.
+    # Re-enable and set up a colorful configuration if none existed.
     logging.disable(logging.NOTSET)
-    # If root has handlers, don't reconfigure (allow host apps to control)
     root = logging.getLogger()
+
+    # If root has handlers, don't reconfigure (allow host apps to control).
     if not root.handlers:
-        logging.basicConfig(
-            level=level,
-            format="[%(levelname)s] %(name)s: %(message)s",
-        )
-    # Ensure package logger has at least requested level
+        if RichHandler is not None:
+            handler = RichHandler(
+                rich_tracebacks=True,
+                show_time=False,
+                show_path=False,
+                markup=False,
+            )
+            handler.setFormatter(logging.Formatter("%(message)s"))
+            root.addHandler(handler)
+            root.setLevel(level)
+        else:
+            logging.basicConfig(
+                level=level,
+                format="[%(levelname)s] %(name)s: %(message)s",
+            )
+
+    # Ensure loggers inherit and respect requested level.
+    root.setLevel(level)
     get_logger().setLevel(level)
 
 

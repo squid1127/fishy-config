@@ -1,16 +1,16 @@
-"""Template renderer for fishy config."""
+"""Template renderer for fishy-config."""
 
-from pathlib import Path
-from typing import List
-from logging import getLogger
 from jinja2 import Environment, StrictUndefined
 from jinja2.exceptions import TemplateError, TemplateSyntaxError, UndefinedError
+from pathlib import Path
+from typing import List
 
+from .log import get_logger
 from .models.files import EnqueuedFile
 from .models.config import EngineConfig
 from .models.exceptions import TemplateRenderError, TemplateUndefinedError, FileIOError
 
-logger = getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class TemplateRenderer:

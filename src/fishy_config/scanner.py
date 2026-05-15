@@ -1,18 +1,18 @@
 """Source directory scanner for fishy-config."""
 
+import yaml
 from pathlib import Path
 from typing import Iterator, TypeVar
-from logging import getLogger
-import yaml
 from pydantic import ValidationError
 
+from .log import get_logger
 from .models.files import FileMetadata, DirectoryMetadata, EnqueuedFile
 from .models.config import EngineConfig
 from .models.exceptions import InvalidMetadataError, TemplateRenderError
 from .models.enums import FileType
 from .renderer import TemplateRenderer
 
-logger = getLogger(__name__)
+logger = get_logger(__name__)
 
 MetadataModel = TypeVar("MetadataModel", FileMetadata, DirectoryMetadata)
 
@@ -29,8 +29,11 @@ class SourceScanner:
         self.config = config
         self.renderer = renderer
 
-    def scan(self, source_dir: Path) -> Iterator[EnqueuedFile]:
+    def scan(self, source_dir: Path | None = None) -> Iterator[EnqueuedFile]:
         """Return an iterator of EnqueuedFile objects representing the files to be rendered from the source directory."""
+        if source_dir is None:
+            source_dir = self.config.source_dir
+
         logger.info(f"Scanning source directory {source_dir} for files to render...")
 
         if not source_dir.is_dir():
@@ -79,6 +82,9 @@ class SourceScanner:
 
     def _build_enqueued_file(self, item: Path, base_rel: Path) -> EnqueuedFile | None:
         """Build an EnqueuedFile for `item`, or return None when it should be skipped."""
+        if item.name.endswith(self.config.metadata_suffix):
+            return None
+
         file_meta = self._read_file_metadata_or_skip(item, base_rel)
         if file_meta is None or file_meta.skip:
             return None
@@ -100,7 +106,10 @@ class SourceScanner:
             return None
 
     def _resolve_file_relative_path(
-        self, item: Path, base_rel: Path, file_meta: FileMetadata
+        self,
+        item: Path,
+        base_rel: Path,
+        file_meta: FileMetadata,
     ) -> Path:
         """Resolve relative output path for a file after metadata overrides."""
         relative = base_rel / item.name
@@ -120,6 +129,8 @@ class SourceScanner:
 
         if file_meta.rename:
             relative = relative.with_name(file_meta.rename)
+        if relative.suffix == self.config.template_suffix:
+            relative = relative.with_suffix("")
 
         return relative
 
@@ -127,7 +138,7 @@ class SourceScanner:
         """Read and validate directory metadata from the configured suffix."""
         config_file = path / self.config.metadata_suffix
         meta = self._read_metadata(config_file, DirectoryMetadata, "directory", rel_path)
-        logger.debug(f"Read directory metadata from {config_file}")
+        logger.debug(f"Read directory metadata from {config_file} -> {meta}")
         return meta
 
     def _read_file_metadata(self, file_path: Path, rel_path: Path) -> FileMetadata:
@@ -136,11 +147,19 @@ class SourceScanner:
         Metadata files are expected at `file.<suffix><metadata_suffix>` to
         preserve the previous behavior.
         """
-        metadata_file = file_path.with_suffix(file_path.suffix + self.config.metadata_suffix)
+        metadata_file = self._resolve_metadata_path(file_path)
         meta = self._read_metadata(metadata_file, FileMetadata, "file", rel_path)
         if metadata_file.is_file():
             logger.debug(f"Read file metadata from {metadata_file}")
         return meta
+
+    def _resolve_metadata_path(self, file_path: Path) -> Path:
+        """Resolve the metadata path for a source file."""
+        if file_path.suffix == self.config.template_suffix:
+            stem = file_path.name[: -len(self.config.template_suffix)]
+            return file_path.with_name(f"{stem}{self.config.metadata_suffix}")
+
+        return file_path.with_name(f"{file_path.name}{self.config.metadata_suffix}")
 
     def _read_metadata(
         self,

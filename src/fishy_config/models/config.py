@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field, field_validator
 from pathlib import Path
 from typing import Any
 
-from .fishy_types import ContextValue
+from .constants import ContextValue
 from .enums import ArtifactType
 from .artifact import BuildArtifact
 

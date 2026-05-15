@@ -2,6 +2,7 @@
 
 from pydantic import BaseModel, Field, model_validator
 from pathlib import Path
+from dataclasses import dataclass, field
 
 from .enums import ArtifactType
 
@@ -9,6 +10,7 @@ from .enums import ArtifactType
 class BuildArtifact(BaseModel):
     """Model representing a build artifact, to generate a manifest of rendered files and their metadata."""
 
+    id: str = Field(..., description="A unique identifier for the artifact.")
     artifact_type: ArtifactType = Field(
         ..., description="The type of the artifact (zip archive, directory, custom builder)."
     )
@@ -43,20 +45,11 @@ class BuildArtifact(BaseModel):
         return self
 
 
-class ArtifactResult(BaseModel):
+@dataclass(frozen=True, slots=True)
+class ArtifactResult:
     """Model representing the result of generating a build artifact, including the path to the generated artifact and any errors."""
 
-    artifact: BuildArtifact = Field(
-        ..., description="The original artifact configuration that was processed."
-    )
-    generated_path: Path | None = Field(
-        default=None,
-        description="The path to the generated artifact, if generation was successful.",
-    )
-    error: Exception | None = Field(
-        default=None, description="Any error that occurred during generation of the artifact."
-    )
-    output: str | None = Field(
-        default=None,
-        description="Any output from the artifact generation process (e.g. stdout/stderr from a custom builder command).",
-    )
+    artifact: BuildArtifact
+    generated_path: Path | None = None
+    error: Exception | None = None
+    output: str | None = None

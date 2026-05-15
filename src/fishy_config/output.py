@@ -1,30 +1,51 @@
-"""Output generator for FishyConfig."""
+"""Output generator for fishy-config."""
 
-from pathlib import Path
-from typing import List, Iterator
-from logging import getLogger
-from pydantic import ValidationError
 import shutil
+from pathlib import Path
+from typing import Iterable, Iterator, List
 
+from pydantic import ValidationError
+
+from .log import get_logger
 from .models.files import EnqueuedFile, FileResult
 from .models.config import EngineConfig
 from .models.exceptions import FileIOError
 from .models.enums import FileType
 from .renderer import TemplateRenderer
 
-logger = getLogger(__name__)
+logger = get_logger(__name__)
 
 
-class OutputGenerator:
-    """Generates output files from rendered templates and produces a manifest of generated artifacts."""
+class OutputBuilder:
+    """Generates output files from rendered templates and produces a list of FileResult objects for each generated file."""
 
     def __init__(self, config: EngineConfig, renderer: TemplateRenderer):
         self.config = config
         self.renderer = renderer
+        
+    def clean_output_directory(self) -> None:
+        """Clean the output directory if the clean_output flag is set in the configuration."""
+        if self.config.clean_output:
+            logger.info(f"Cleaning output directory {self.config.output_dir}...")
+            try:
+                if self.config.output_dir.exists():
+                    shutil.rmtree(self.config.output_dir)
+                self.config.output_dir.mkdir(parents=True, exist_ok=True)
+            except Exception as e:
+                logger.exception(f"Failed to clean output directory {self.config.output_dir}")
+                raise FileIOError(
+                    f"Failed to clean output directory {self.config.output_dir}: {str(e)}"
+                ) from e
 
-    def generate(self, enqueued_files: Iterator[EnqueuedFile]) -> Iterator[FileResult]:
+    def generate(
+        self, enqueued_files: Iterable[EnqueuedFile] | List[EnqueuedFile], sort: bool = True, clean: bool = True
+    ) -> Iterator[FileResult]:
         """Generate output files from the list or iterator of EnqueuedFile objects."""
         logger.info(f"Generating output files in {self.config.output_dir}...")
+        if sort and isinstance(enqueued_files, list):
+            enqueued_files = self._sort_enqueued_files(enqueued_files)
+        if clean:
+            self.clean_output_directory()
         for enqueued_file in enqueued_files:
             try:
                 if enqueued_file.file_type == FileType.TEMPLATE:
@@ -46,8 +67,16 @@ class OutputGenerator:
             output_path = self.config.output_dir / enqueued_file.relative_path
             output_path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(enqueued_file.source, output_path)
+            logger.debug(f"Copied raw file {enqueued_file.source} to {output_path}")
         except Exception as e:
             logger.exception(f"Failed to copy raw file {enqueued_file.source} to {output_path}")
             raise FileIOError(
                 f"Failed to copy raw file {enqueued_file.source} to {output_path}: {str(e)}"
             ) from e
+
+    def _sort_enqueued_files(self, enqueued_files: List[EnqueuedFile]) -> List[EnqueuedFile]:
+        """Sort enqueued files to ensure that directories are created before files."""
+        return sorted(
+            enqueued_files,
+            key=lambda f: (f.metadata.priority, f.file_type == FileType.TEMPLATE, f.relative_path),
+        )

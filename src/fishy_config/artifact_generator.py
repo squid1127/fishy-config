@@ -1,19 +1,19 @@
 """Artifact generator for producing build artifacts based on the configuration."""
 
-from pathlib import Path
-import shutil
-from typing import Iterator
-from logging import getLogger
 import subprocess
+import shutil
 import zipfile
+from pathlib import Path
+from typing import Iterable, Iterator
 
+from .log import get_logger
 from .models.config import EngineConfig
 from .models.artifact import BuildArtifact, ArtifactResult
 from .models.exceptions import ArtifactGenerationError
 from .models.enums import ArtifactType
 from .renderer import TemplateRenderer
 
-logger = getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ArtifactGenerator:
@@ -23,10 +23,8 @@ class ArtifactGenerator:
         self.config = config
         self.renderer = renderer
 
-    def generate_artifacts(
-        self, artifacts: Iterator[BuildArtifact]
-    ) -> Iterator[ArtifactResult]:
-        """Generate build artifacts based on the list or iterator of BuildArtifact configurations, yielding ArtifactResult objects with the results of each generation attempt."""
+    def generate_artifacts(self, artifacts: Iterable[BuildArtifact]) -> Iterator[ArtifactResult]:
+        """Generate build artifacts based on an iterable of BuildArtifact configurations, yielding ArtifactResult objects with the results of each generation attempt."""
         for artifact in artifacts:
             try:
                 if artifact.artifact_type == ArtifactType.CUSTOM_BUILDER:
@@ -39,7 +37,7 @@ class ArtifactGenerator:
                         artifact=artifact,
                         generated_path=None,
                         error=ArtifactGenerationError(
-                            f"Unsupported artifact type {artifact.artifact_type} for artifact at {artifact.path}"
+                            f"Unsupported artifact type {artifact.artifact_type} for artifact {artifact.id}"
                         ),
                     )
 
@@ -55,7 +53,7 @@ class ArtifactGenerator:
         """Render the command for a custom builder artifact using the Jinja2 context."""
         if not artifact.command:
             raise ArtifactGenerationError(
-                f"Custom builder artifact at {artifact.path} is missing a command."
+                f"Custom builder artifact {artifact.id} is missing a command."
             )
 
         logger.debug(
@@ -74,18 +72,18 @@ class ArtifactGenerator:
                 f"Failed to render command for custom builder artifact at {artifact.path}"
             )
             raise ArtifactGenerationError(
-                f"Failed to render command for custom builder artifact at {artifact.path}: {str(e)}"
+                f"Failed to render command for custom builder artifact {artifact.id}: {str(e)}"
             ) from e
 
     def _run_custom_builder(self, artifact: BuildArtifact) -> ArtifactResult:
         """Run a custom builder command to generate an artifact, using the rendered content as context."""
         if not artifact.command:
             raise ArtifactGenerationError(
-                f"Custom builder artifact at {artifact.path} is missing a command."
+                f"Custom builder artifact {artifact.id} is missing a command."
             )
         if not artifact.overwrite:
             raise ArtifactGenerationError(
-                f"Custom builder artifact at {artifact.path} must have overwrite=True to run the builder command."
+                f"Custom builder artifact {artifact.id} must have overwrite=True to run the builder command."
             )
         command = self._render_custom_builder_command(artifact)
 
@@ -95,7 +93,7 @@ class ArtifactGenerator:
         try:
             result = subprocess.run(command, shell=True, check=True, cwd=artifact.path)
             logger.info(f"Custom builder for artifact at {artifact.path} completed successfully.")
-            
+
             return ArtifactResult(
                 artifact=artifact,
                 generated_path=artifact.path,
@@ -104,7 +102,7 @@ class ArtifactGenerator:
         except subprocess.CalledProcessError as e:
             logger.exception(f"Custom builder command failed for artifact at {artifact.path}")
             raise ArtifactGenerationError(
-                f"Custom builder command failed for artifact at {artifact.path}: {str(e)}"
+                f"Custom builder command failed for artifact {artifact.id}: {str(e)}"
             ) from e
 
     def _generate_zip(self, artifact: BuildArtifact) -> ArtifactResult:
@@ -126,7 +124,7 @@ class ArtifactGenerator:
             except Exception as e:
                 logger.exception(f"Failed to generate zip archive artifact at {artifact.path}")
                 raise ArtifactGenerationError(
-                    f"Failed to generate zip archive artifact at {artifact.path}: {str(e)}"
+                    f"Failed to generate zip archive artifact {artifact.id}: {str(e)}"
                 ) from e
 
         return ArtifactResult(
@@ -161,5 +159,5 @@ class ArtifactGenerator:
         except Exception as e:
             logger.exception(f"Failed to generate directory artifact at {artifact.path}")
             raise ArtifactGenerationError(
-                f"Failed to generate directory artifact at {artifact.path}: {str(e)}"
+                f"Failed to generate directory artifact {artifact.id}: {str(e)}"
             ) from e

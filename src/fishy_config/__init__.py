@@ -1,21 +1,39 @@
-"""A fishy python tool to make managing config files easier using a simple templating system."""
+"""fishy-config public package API.
+
+This package exposes the main build entrypoint, CLI app, logging helpers, and
+the core exception and context types used by the project.
+"""
 
 __version__ = "0.1.0"
 
+from .cli import app
+from .log import disable_logging, enable_logging, get_logger
 from .models.exceptions import (
-    FishyConfigError,
     ContextLoadError,
-    TemplateRenderError,
-    InvalidMetadataError,
     FileIOError,
+    FishyConfigError,
+    InvalidFileSyntaxError,
+    InvalidMetadataError,
+    ScanError,
+    TemplateRenderError,
+    TemplateUndefinedError,
 )
-from .models.fishy_types import ContextValue
+from .models.constants import ContextValue
+from .builder import build
 
 __all__ = [
-    "FishyConfigError",
+    "app",
+    "build",
     "ContextLoadError",
-    "TemplateRenderError",
-    "InvalidMetadataError",
-    "FileIOError",
     "ContextValue",
+    "disable_logging",
+    "enable_logging",
+    "FileIOError",
+    "FishyConfigError",
+    "get_logger",
+    "InvalidFileSyntaxError",
+    "InvalidMetadataError",
+    "ScanError",
+    "TemplateRenderError",
+    "TemplateUndefinedError",
 ]
