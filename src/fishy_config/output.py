@@ -7,7 +7,7 @@ from typing import Iterable, Iterator, List
 from pydantic import ValidationError
 
 from .log import get_logger
-from .models.files import EnqueuedFile, FileResult
+from .models.files import QueuedFile, FileResult
 from .models.config import EngineConfig
 from .models.exceptions import FileIOError
 from .models.enums import FileType
@@ -22,7 +22,7 @@ class OutputBuilder:
     def __init__(self, config: EngineConfig, renderer: TemplateRenderer):
         self.config = config
         self.renderer = renderer
-        
+
     def clean_output_directory(self) -> None:
         """Clean the output directory if the clean_output flag is set in the configuration."""
         if self.config.clean_output:
@@ -38,45 +38,48 @@ class OutputBuilder:
                 ) from e
 
     def generate(
-        self, enqueued_files: Iterable[EnqueuedFile] | List[EnqueuedFile], sort: bool = True, clean: bool = True
+        self,
+        queued_files: Iterable[QueuedFile] | List[QueuedFile],
+        sort: bool = True,
+        clean: bool = True,
     ) -> Iterator[FileResult]:
-        """Generate output files from the list or iterator of EnqueuedFile objects."""
+        """Generate output files from the list or iterator of QueuedFile objects."""
         logger.info(f"Generating output files in {self.config.output_dir}...")
-        if sort and isinstance(enqueued_files, list):
-            enqueued_files = self._sort_enqueued_files(enqueued_files)
+        if sort and isinstance(queued_files, list):
+            queued_files = self._sort_queued_files(queued_files)
         if clean:
             self.clean_output_directory()
-        for enqueued_file in enqueued_files:
+        for queued_file in queued_files:
             try:
-                if enqueued_file.file_type == FileType.TEMPLATE:
-                    rendered_content = self.renderer.render_file(enqueued_file)
-                    yield FileResult(enqueued_file=enqueued_file, rendered_content=rendered_content)
+                if queued_file.file_type == FileType.TEMPLATE:
+                    rendered_content = self.renderer.render_file(queued_file)
+                    yield FileResult(queued_file=queued_file, rendered_content=rendered_content)
 
-                elif enqueued_file.file_type == FileType.RAW:
-                    self._copy_raw_file(enqueued_file)
-                    yield FileResult(enqueued_file=enqueued_file)
+                elif queued_file.file_type == FileType.RAW:
+                    self._copy_raw_file(queued_file)
+                    yield FileResult(queued_file=queued_file)
 
             except Exception as e:
-                logger.exception(f"Failed to render file {enqueued_file.source}")
-                yield FileResult(enqueued_file=enqueued_file, error=e)
+                logger.exception(f"Failed to render file {queued_file.source}")
+                yield FileResult(queued_file=queued_file, error=e)
 
-    def _copy_raw_file(self, enqueued_file: EnqueuedFile) -> None:
+    def _copy_raw_file(self, queued_file: QueuedFile) -> None:
         """Copy a raw file to the output directory without rendering."""
         output_path = Path()
         try:
-            output_path = self.config.output_dir / enqueued_file.relative_path
+            output_path = self.config.output_dir / queued_file.relative_path
             output_path.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy(enqueued_file.source, output_path)
-            logger.debug(f"Copied raw file {enqueued_file.source} to {output_path}")
+            shutil.copy(queued_file.source, output_path)
+            logger.debug(f"Copied raw file {queued_file.source} to {output_path}")
         except Exception as e:
-            logger.exception(f"Failed to copy raw file {enqueued_file.source} to {output_path}")
+            logger.exception(f"Failed to copy raw file {queued_file.source} to {output_path}")
             raise FileIOError(
-                f"Failed to copy raw file {enqueued_file.source} to {output_path}: {str(e)}"
+                f"Failed to copy raw file {queued_file.source} to {output_path}: {str(e)}"
             ) from e
 
-    def _sort_enqueued_files(self, enqueued_files: List[EnqueuedFile]) -> List[EnqueuedFile]:
-        """Sort enqueued files to ensure that directories are created before files."""
+    def _sort_queued_files(self, queued_files: List[QueuedFile]) -> List[QueuedFile]:
+        """Sort queued files to ensure that directories are created before files."""
         return sorted(
-            enqueued_files,
+            queued_files,
             key=lambda f: (f.metadata.priority, f.file_type == FileType.TEMPLATE, f.relative_path),
         )

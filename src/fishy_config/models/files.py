@@ -8,7 +8,7 @@ from .enums import FileType
 
 
 class FileMetadata(BaseModel):
-    """Metadata for an enqueued file."""
+    """Metadata for an queued file."""
 
     skip: bool = Field(default=False, description="Whether to skip processing this file.")
     path: Path | None = Field(
@@ -29,12 +29,13 @@ class FileMetadata(BaseModel):
 
     def summary(self) -> str:
         """Return a summary of the metadata for logging purposes."""
-        summary = ''
+        summary = ""
         if self.skip:
-            summary += 'skip, '
+            summary += "skip, "
         if self.priority != 0:
-            summary += f'priority={self.priority}, '
+            summary += f"priority={self.priority}, "
         return summary
+
 
 class DirectoryVariantMode(BaseModel):
     """Model representing a directory's variant mode configuration."""
@@ -47,8 +48,9 @@ class DirectoryVariantMode(BaseModel):
         default=None, description="Optional mapping of context values to subdirectory names."
     )
 
+
 class DirectoryMetadata(FileMetadata):
-    """Metadata for an enqueued directory."""
+    """Metadata for an queued directory."""
 
     variant: DirectoryVariantMode | None = Field(
         default=None, description="Optional configuration for directory variants based on context."
@@ -61,14 +63,15 @@ class DirectoryMetadata(FileMetadata):
         """Return a summary of the directory metadata for logging purposes."""
         summary = super().summary()
         if self.variant:
-            summary += f'variant key={self.variant.key}, '
+            summary += f"variant key={self.variant.key}, "
             if self.variant.mapping:
-                summary += f'variant mapping={self.variant.mapping}, '
+                summary += f"variant mapping={self.variant.mapping}, "
         if self.flatten:
-            summary += 'flatten, '
+            summary += "flatten, "
         return summary
 
-class EnqueuedFile(BaseModel):
+
+class QueuedFile(BaseModel):
     """Model representing a file that is queued for copying/rendering."""
 
     source: Path = Field(..., description="The source path of the file.")
@@ -83,8 +86,8 @@ class EnqueuedFile(BaseModel):
 
 @dataclass(frozen=True, slots=True)
 class FileResult:
-    """Model representing the result of processing an enqueued file, including the rendered content and any errors."""
+    """Model representing the result of processing an queued file, including the rendered content and any errors."""
 
-    enqueued_file: EnqueuedFile
+    queued_file: QueuedFile
     rendered_content: str | None = None
     error: Exception | None = None

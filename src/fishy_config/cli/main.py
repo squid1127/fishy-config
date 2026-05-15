@@ -11,9 +11,9 @@ from .models import BuildConfig, ContextSource, ContextSourceType, BuildFlowConf
 from .exceptions import InvalidContextError, InvalidContextSchemaError, InvalidBuildFileError
 
 from ..models.config import EngineConfig
-from ..models.files import EnqueuedFile
+from ..models.files import QueuedFile
 from ..log import get_logger
-from ..scanner import SourceScanner
+from ..scanner import SourceTreeScanner
 from ..renderer import TemplateRenderer
 from ..artifact_generator import ArtifactGenerator
 from ..output import OutputBuilder
@@ -90,20 +90,18 @@ class FishyConfigCLI:
         self.console.print("[green]Successfully validated context against schema.[/green]")
         engine_config = self._generate_engine_config()
         renderer = TemplateRenderer(engine_config)
-        scanner = SourceScanner(engine_config, renderer)
+        scanner = SourceTreeScanner(engine_config, renderer)
 
         with self.console.status("[bold green]Scanning source directory...[/bold green]") as status:
-            enqueued_files = []
-            for enqueued_file in scanner.scan():
-                enqueued_files.append(enqueued_file)
-                logger.debug(
-                    f"Enqueued file: {enqueued_file.source} -> {enqueued_file.relative_path}"
-                )
+            queued_files = []
+            for queued_file in scanner.scan():
+                queued_files.append(queued_file)
+                logger.debug(f"Queued file: {queued_file.source} -> {queued_file.relative_path}")
                 status.update(
-                    f"[blue]({len(enqueued_files)})[/blue] [green]Found {enqueued_file.source}[/green]"
+                    f"[blue]({len(queued_files)})[/blue] [green]Found {queued_file.source}[/green]"
                 )
 
-        self._enqueued_file_summary(enqueued_files)
+        self._queued_file_summary(queued_files)
         if self.active_flow and self.active_flow.dry_run:
             self.console.print("[yellow]Dry run mode enabled. No files will be generated.[/yellow]")
             return
@@ -117,27 +115,27 @@ class FishyConfigCLI:
         output = OutputBuilder(engine_config, renderer)
         results = []
         with self.console.status("[bold green]Generating output files...[/bold green]") as status:
-            for result in output.generate(enqueued_files):
+            for result in output.generate(queued_files):
                 results.append(result)
                 if result.error:
                     logger.error(
-                        f"Error generating file {result.enqueued_file.source}: {result.error}"
+                        f"Error generating file {result.queued_file.source}: {result.error}"
                     )
                     self.console.print(
-                        f"[red]Error generating file {result.enqueued_file.source}: {result.error}[/red]"
+                        f"[red]Error generating file {result.queued_file.source}: {result.error}[/red]"
                     )
                 else:
                     logger.debug(
-                        f"Successfully generated file {result.enqueued_file.source} -> {result.enqueued_file.relative_path}"
+                        f"Successfully generated file {result.queued_file.source} -> {result.queued_file.relative_path}"
                     )
                     status.update(
-                        f"[blue]({len(results)}/{len(enqueued_files)})[/blue] [green]Generated {result.enqueued_file.relative_path}[/green]"
+                        f"[blue]({len(results)}/{len(queued_files)})[/blue] [green]Generated {result.queued_file.relative_path}[/green]"
                     )
 
         self.console.print(
             f"[bold green]Successfully generated {len([r for r in results if not r.error])} files.[/bold green]"
         )
-        
+
         artifact_generator = ArtifactGenerator(engine_config, renderer)
         artifact_results = []
         with self.console.status("[bold green]Generating artifacts...[/bold green]") as status:
@@ -157,11 +155,11 @@ class FishyConfigCLI:
                     status.update(
                         f"[blue]({len(artifact_results)}/{len(engine_config.artifacts)})[/blue] [green]Generated artifact {artifact_result.generated_path}[/green]"
                     )
-        
+
         self.console.print(
             f"[bold green]Successfully generated {len([a for a in artifact_results if not a.error])} artifacts.[/bold green]"
         )
-        
+
         self.console.print("[bold green]Build process completed successfully.[/bold green]")
         self.console.print(f"[bold blue]Output directory: {engine_config.output_dir}[/bold blue]")
         for artifact_result in artifact_results:
@@ -170,9 +168,7 @@ class FishyConfigCLI:
                     f"[red]- Artifact: {artifact_result.artifact.path} failed with error: {artifact_result.error}[/red]"
                 )
             else:
-                self.console.print(
-                    f"[green]- Artifact: {artifact_result.generated_path}[/green]"
-                )
+                self.console.print(f"[green]- Artifact: {artifact_result.generated_path}[/green]")
 
     def _apply_build_config_to_context(self) -> None:
         """Apply the build configuration to the context manager."""
@@ -209,14 +205,14 @@ class FishyConfigCLI:
         logger.debug(f"Generated engine configuration: {engine_config}")
         return engine_config
 
-    def _enqueued_file_summary(self, enqueued_files: list[EnqueuedFile]) -> None:
-        """Print a summary of the enqueued files."""
+    def _queued_file_summary(self, queued_files: list[QueuedFile]) -> None:
+        """Print a summary of the queued files."""
         self.console.print(
-            f"[bold green]Enqueued {len(enqueued_files)} files for processing:[/bold green]"
+            f"[bold green]Queued {len(queued_files)} files for processing:[/bold green]"
         )
-        for enqueued_file in enqueued_files:
+        for queued_file in queued_files:
             self.console.print(
-                f" - [blue]{enqueued_file.source}[/blue] -> [green]{enqueued_file.relative_path}[/green] ({enqueued_file.metadata.summary()})"
+                f" - [blue]{queued_file.source}[/blue] -> [green]{queued_file.relative_path}[/green] ({queued_file.metadata.summary()})"
             )
 
     @property

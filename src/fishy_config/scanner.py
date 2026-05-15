@@ -6,7 +6,7 @@ from typing import Iterator, TypeVar
 from pydantic import ValidationError
 
 from .log import get_logger
-from .models.files import FileMetadata, DirectoryMetadata, EnqueuedFile
+from .models.files import FileMetadata, DirectoryMetadata, QueuedFile
 from .models.config import EngineConfig
 from .models.exceptions import InvalidMetadataError, TemplateRenderError
 from .models.enums import FileType
@@ -17,11 +17,11 @@ logger = get_logger(__name__)
 MetadataModel = TypeVar("MetadataModel", FileMetadata, DirectoryMetadata)
 
 
-class SourceScanner:
+class SourceTreeScanner:
     """Scans a source directory and produces metadata for files and directories.
 
     The implementation here factors out metadata reading and yields
-    EnqueuedFile objects from a single recursive generator, keeping the
+    QueuedFile objects from a single recursive generator, keeping the
     relative-path resolution logic in one place.
     """
 
@@ -29,8 +29,8 @@ class SourceScanner:
         self.config = config
         self.renderer = renderer
 
-    def scan(self, source_dir: Path | None = None) -> Iterator[EnqueuedFile]:
-        """Return an iterator of EnqueuedFile objects representing the files to be rendered from the source directory."""
+    def scan(self, source_dir: Path | None = None) -> Iterator[QueuedFile]:
+        """Return an iterator of QueuedFile objects representing the files to be rendered from the source directory."""
         if source_dir is None:
             source_dir = self.config.source_dir
 
@@ -38,10 +38,10 @@ class SourceScanner:
 
         if not source_dir.is_dir():
             raise ValueError(f"Source directory {source_dir} does not exist or is not a directory.")
-        yield from self._iter_enqueued_files(source_dir, Path())
+        yield from self._iter_queued_files(source_dir, Path())
 
-    def _iter_enqueued_files(self, path: Path, rel_path: Path) -> Iterator[EnqueuedFile]:
-        """Recursively iterate EnqueuedFile objects under `path`.
+    def _iter_queued_files(self, path: Path, rel_path: Path) -> Iterator[QueuedFile]:
+        """Recursively iterate QueuedFile objects under `path`.
 
         `rel_path` is the path to use for files under `path` unless overridden by
         directory or file metadata.
@@ -57,12 +57,12 @@ class SourceScanner:
 
         for item in sorted(path.iterdir()):
             if item.is_dir():
-                yield from self._iter_enqueued_files(item, base_rel / item.name)
+                yield from self._iter_queued_files(item, base_rel / item.name)
                 continue
 
-            enqueued = self._build_enqueued_file(item, base_rel)
-            if enqueued is not None:
-                yield enqueued
+            queued = self._build_queued_file(item, base_rel)
+            if queued is not None:
+                yield queued
 
     def _read_directory_metadata_or_skip(
         self, path: Path, rel_path: Path
@@ -80,8 +80,8 @@ class SourceScanner:
             return rel_path
         return dir_meta.path if dir_meta.path.is_absolute() else rel_path / dir_meta.path
 
-    def _build_enqueued_file(self, item: Path, base_rel: Path) -> EnqueuedFile | None:
-        """Build an EnqueuedFile for `item`, or return None when it should be skipped."""
+    def _build_queued_file(self, item: Path, base_rel: Path) -> QueuedFile | None:
+        """Build an QueuedFile for `item`, or return None when it should be skipped."""
         if item.name.endswith(self.config.metadata_suffix):
             return None
 
@@ -93,7 +93,7 @@ class SourceScanner:
         file_type = (
             FileType.TEMPLATE if item.suffix == self.config.template_suffix else FileType.RAW
         )
-        return EnqueuedFile(
+        return QueuedFile(
             source=item, relative_path=relative, file_type=file_type, metadata=file_meta
         )
 
@@ -150,7 +150,7 @@ class SourceScanner:
         metadata_file = self._resolve_metadata_path(file_path)
         meta = self._read_metadata(metadata_file, FileMetadata, "file", rel_path)
         if metadata_file.is_file():
-            logger.debug(f"Read file metadata from {metadata_file}")
+            logger.debug(f"Read file metadata from {metadata_file} -> {meta}")
         return meta
 
     def _resolve_metadata_path(self, file_path: Path) -> Path:
