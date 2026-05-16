@@ -116,6 +116,8 @@ class SourceTreeScanner:
 
     def _resolve_directory_base_path(self, rel_path: Path, dir_meta: DirectoryMetadata) -> Path:
         """Resolve the relative output base path for a directory."""
+        if dir_meta.output_name:
+            rel_path = rel_path.with_name(dir_meta.output_name)
         if not dir_meta.path:
             return rel_path
         return dir_meta.path if dir_meta.path_absolute else rel_path / dir_meta.path
