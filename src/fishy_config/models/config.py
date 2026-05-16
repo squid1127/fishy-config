@@ -39,6 +39,9 @@ class EngineConfig(BaseModel):
     internal_template_namespace: str = Field(
         default="_build", description="Namespace in the Jinja2 context for internal metadata and variables."
     )
+    skip_patterns: list[str] = Field(
+        default_factory=list, description="List of glob patterns to match files that should be skipped during rendering."
+    )
 
     @field_validator("source_dir", "output_dir")
     def validate_directories(cls, value: Path) -> Path:

@@ -206,6 +206,7 @@ class FishyConfigCLI:
             artifacts=self.config.artifacts,
             clean_output=self.config.clean_output,
             overwrite=self.config.overwrite,
+            skip_patterns=self.config.skip_patterns,
         )
         logger.debug(f"Generated engine configuration: {engine_config}")
         return engine_config

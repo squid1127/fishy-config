@@ -12,6 +12,7 @@ Top-level `build.yaml` keys
 - `artifacts` (array, optional): list of artifact definitions to generate after rendering.
 - `clean_output` (boolean, optional): if true, the output directory will be cleaned before writing files.
 - `overwrite` (boolean, optional): if true, existing files in output will be overwritten.
+- `skip_patterns` (array of strings, optional): glob patterns for source files/directories to skip during scanning.
 
 Notes about paths
 

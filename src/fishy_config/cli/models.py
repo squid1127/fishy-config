@@ -81,6 +81,10 @@ class BuildConfig(BaseModel):
         default=False,
         description="If True, existing files in the output directory will be overwritten.",
     )
+    skip_patterns: list[str] = Field(
+        default_factory=list,
+        description="Glob patterns for source files or directories to skip during scanning.",
+    )
 
     @field_validator("source", "output")
     def validate_paths(cls, v: Path) -> Path:

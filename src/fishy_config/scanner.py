@@ -1,5 +1,6 @@
 """Source directory scanner for fishy-config."""
 
+from fnmatch import fnmatchcase
 import yaml
 from pathlib import Path
 from typing import Iterator, TypeVar
@@ -28,6 +29,7 @@ class SourceTreeScanner:
     def __init__(self, config: EngineConfig, renderer: TemplateRenderer):
         self.config = config
         self.renderer = renderer
+        self._scan_root: Path | None = None
 
     def scan(self, source_dir: Path | None = None) -> Iterator[QueuedFile]:
         """Return an iterator of QueuedFile objects representing the files to be rendered from the source directory."""
@@ -38,7 +40,12 @@ class SourceTreeScanner:
 
         if not source_dir.is_dir():
             raise ValueError(f"Source directory {source_dir} does not exist or is not a directory.")
-        yield from self._iter_queued_files(source_dir, Path())
+
+        self._scan_root = source_dir
+        try:
+            yield from self._iter_queued_files(source_dir, Path())
+        finally:
+            self._scan_root = None
 
     def _iter_queued_files(self, path: Path, rel_path: Path) -> Iterator[QueuedFile]:
         """Recursively iterate QueuedFile objects under `path`.
@@ -97,6 +104,10 @@ class SourceTreeScanner:
         self, path: Path, rel_path: Path
     ) -> DirectoryMetadata | None:
         """Read directory metadata, returning None when metadata is invalid."""
+        if self._should_skip_source_path(path, is_dir=True):
+            logger.debug(f"Skipping directory {path} due to skip_patterns")
+            return None
+
         try:
             return self._read_dir_metadata(path, rel_path)
         except InvalidMetadataError as e:
@@ -107,10 +118,14 @@ class SourceTreeScanner:
         """Resolve the relative output base path for a directory."""
         if not dir_meta.path:
             return rel_path
-        return dir_meta.path if dir_meta.path.is_absolute() else rel_path / dir_meta.path
+        return dir_meta.path if dir_meta.path_absolute else rel_path / dir_meta.path
 
     def _build_queued_file(self, item: Path, base_rel: Path) -> QueuedFile | None:
         """Build an QueuedFile for `item`, or return None when it should be skipped."""
+        if self._should_skip_source_path(item, is_dir=False):
+            logger.debug(f"Skipping file {item} due to skip_patterns")
+            return None
+
         if item.name.endswith(self.config.metadata_suffix):
             return None
 
@@ -134,6 +149,49 @@ class SourceTreeScanner:
             logger.warning(f"Skipping file {file_path} due to invalid metadata: {e}")
             return None
 
+    def _should_skip_source_path(self, source_path: Path, *, is_dir: bool) -> bool:
+        """Return True when the source path matches any configured skip pattern."""
+        relative = self._relative_source_path(source_path)
+        if relative is None:
+            return False
+
+        return any(
+            self._pattern_matches_path(pattern, relative, is_dir)
+            for pattern in self._skip_patterns()
+        )
+
+    def _relative_source_path(self, source_path: Path) -> str | None:
+        """Return the path relative to the active scan root as POSIX text."""
+        if self._scan_root is None:
+            return None
+
+        try:
+            relative_path = source_path.relative_to(self._scan_root)
+        except ValueError:
+            return None
+
+        if relative_path == Path():
+            return None
+
+        return relative_path.as_posix()
+
+    def _skip_patterns(self) -> list[str]:
+        """Return normalized skip patterns from config."""
+        patterns = getattr(self.config, "skip_patterns", []) or []
+        return [pattern.strip() for pattern in patterns if pattern and pattern.strip()]
+
+    def _pattern_matches_path(self, pattern: str, relative: str, is_dir: bool) -> bool:
+        """Check whether a pattern matches a source-relative path."""
+        candidates = [relative, f"{relative}/"] if is_dir else [relative]
+        if any(fnmatchcase(candidate, pattern) for candidate in candidates):
+            return True
+
+        if not is_dir or not pattern.endswith("/**"):
+            return False
+
+        base = pattern[:-3].rstrip("/")
+        return bool(base) and (relative == base or relative.startswith(f"{base}/"))
+
     def _resolve_file_relative_path(
         self,
         item: Path,
@@ -147,7 +205,7 @@ class SourceTreeScanner:
             try:
                 relative = (
                     file_meta.path.relative_to("/")
-                    if file_meta.path.is_absolute()
+                    if file_meta.path_absolute
                     else base_rel / file_meta.path
                 )
             except ValueError:

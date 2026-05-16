@@ -15,6 +15,10 @@ class FileMetadata(BaseModel):
         default=None,
         description="Optional new path for the file when rendered. Use a '/' prefix for absolute paths or no prefix for relative paths.",
     )
+    path_absolute: bool = Field(
+        default=False,
+        description="Whether the provided path should be treated as absolute. If true, the path will be realtive to the output directory. If false, the path will be treated as relative itself.",
+    )
     output_name: str | None = Field(
         default=None,
         description="Optional new name for the file when rendered.",
