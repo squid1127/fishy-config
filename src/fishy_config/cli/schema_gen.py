@@ -5,7 +5,6 @@ from pydantic import BaseModel, Field
 import json
 
 from .models import BuildConfig
-from ..models.config import EngineConfig
 from ..models.files import FileMetadata, DirectoryMetadata
 
 SCHEMAS: dict[tuple[str, str], type[BaseModel]] = {
