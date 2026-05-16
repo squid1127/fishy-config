@@ -65,6 +65,10 @@ class BuildConfig(BaseModel):
         default_factory=dict,
         description="A json schema-like dictionary representing the context's structure and default values.",
     )
+    context_file: Path | None = Field(
+        None,
+        description="An optional path to a YAML or JSON file containing context schema and default values. If provided, this file will override the 'context' field in the configuration.",
+    ) 
     presets: dict[str, dict] = Field(
         default_factory=dict,
         description="A dictionary of named context presets, where each preset is a dictionary of context values.",

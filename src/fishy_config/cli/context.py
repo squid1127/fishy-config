@@ -70,7 +70,7 @@ class ContextManager:
         """
         self._schema = schema
 
-    def validate_context(self, schema: dict | None) -> None:
+    def validate_context(self, schema: dict | None = None) -> None:
         """
         Validates the current context against a provided JSON schema.
 

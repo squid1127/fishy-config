@@ -82,8 +82,9 @@ class FishyConfigCLI:
 
     def run(self) -> None:
         """Run the fishy-config CLI with the provided build configuration."""
+        logger.debug(f"Validating {self.context_manager.context} against schema {self.context_manager.schema}")
         try:
-            self.context_manager.validate_context(schema=self.config.context)
+            self.context_manager.validate_context()
         except InvalidContextSchemaError as e:
             raise InvalidContextError(f"Context validation failed: {e}") from e
 
@@ -177,10 +178,23 @@ class FishyConfigCLI:
 
     def _apply_build_config_to_context(self) -> None:
         """Apply the build configuration to the context manager."""
-        self.context_manager.set_schema(self.config.context)
+        context = self.config.context
+        if self.config.context_file:
+            file_context = self._read_context_file()
+            if file_context and self.config.context:
+                logger.warning(
+                    "Both 'context' and 'context_file' are provided in the build configuration. Only 'context_file' will be used and 'context' will be ignored."
+                )
+            else:
+                logger.info(f"Applied context from: {self.config.context_file}")
+            context = file_context or context
+        defaults = schema_as_defaults(context)
+        logger.debug(f"Extracted context schema: {context}")
+        logger.debug(f"Extracted default context values from schema: {defaults}")
+        self.context_manager.set_schema(context)
         self.context_manager.add_source(
             ContextSource(
-                data=schema_as_defaults(self.config.context),
+                data=defaults,
                 source_type=ContextSourceType.DEFAULTS,
                 priority=1,
             )
@@ -196,6 +210,32 @@ class FishyConfigCLI:
                 ContextSource(data=data, source_type=ContextSourceType.PRESET, priority=10)
             )
             logger.info(f"Applied preset {preset} to context.")
+        logger.debug(f"Final context after applying build configuration: {self.context_manager.context}")
+            
+    def _read_context_file(self) -> dict | None:
+        """Read the context schema and defaults from the specified context file."""
+        if not self.config.context_file:
+            return None
+        if not self.config.context_file.exists():
+            raise InvalidBuildFileError(
+                f"Context file {self.config.context_file} does not exist."
+            )
+        try:
+            text = self.config.context_file.read_text()
+            if self.config.context_file.suffix in [".yaml", ".yml"]:
+                return yaml.safe_load(text)
+            elif self.config.context_file.suffix == ".json":
+                import json
+
+                return json.loads(text)
+            else:
+                raise InvalidBuildFileError(
+                    f"Context file {self.config.context_file} has unsupported file extension. Supported extensions are .yaml, .yml, and .json."
+                )
+        except (yaml.YAMLError, json.JSONDecodeError) as e:
+            raise InvalidBuildFileError(
+                f"Failed to parse context file {self.config.context_file}: {e}"
+            ) from e
 
     def _generate_engine_config(self) -> EngineConfig:
         """Generate an EngineConfig from the current context."""
