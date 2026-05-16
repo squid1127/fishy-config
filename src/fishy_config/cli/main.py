@@ -2,9 +2,9 @@
 
 import pydantic
 import rich
-import typer
 from pathlib import Path
 import yaml
+import json
 
 from .context import ContextManager, schema_as_defaults
 from .models import BuildConfig, ContextSource, ContextSourceType, BuildFlowConfig
@@ -225,7 +225,6 @@ class FishyConfigCLI:
             if self.config.context_file.suffix in [".yaml", ".yml"]:
                 return yaml.safe_load(text)
             elif self.config.context_file.suffix == ".json":
-                import json
 
                 return json.loads(text)
             else:
