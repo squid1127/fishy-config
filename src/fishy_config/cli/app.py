@@ -11,6 +11,7 @@ import yaml
 from ..log import enable_logging, get_logger
 from .main import FishyConfigCLI
 from .models import ContextSourceType
+from .schema_gen import generate_schemas, generate_vs_code_settings
 
 logger = get_logger(__name__)
 
@@ -74,6 +75,39 @@ def build(
     )
     rich.print("[green]Configuration loaded successfully. Starting build process...[/green]")
     app_instance.run()
+    
+@app.command()
+def generate_schema(
+    output: Path = typer.Argument(
+        Path(".fishy-config/schemas"), help="The output directory where the generated JSON schema files will be saved."
+    ),
+    vs_code_settings: Path | None = typer.Option(
+        None,
+        "--vs-code-settings",
+        help="If provided, also update or generate a VS Code settings.json file with JSON schema associations for the generated schema files.",
+    ),
+):
+    """Generate JSON schema files for the Pydantic models used in fishy-config."""
+    if output.exists() and not output.is_dir():
+        raise typer.BadParameter(f"Output path '{output}' exists and is not a directory.")
+    elif not output.exists():
+        output.mkdir(parents=True)
+    generate_schemas(output)
+    typer.echo(f"JSON schema files generated successfully in '{output}'.")
+    
+@app.command()
+def generate_schema_vs(
+    vs_code_settings: Path = typer.Argument(
+        Path(".vscode/settings.json"), help="The path to the VS Code settings.json file to update or create with JSON schema associations for fishy-config."
+    )
+):
+    """Generate or update a VS Code settings.json file with JSON schema associations for the Pydantic models used in fishy-config."""
+    if vs_code_settings.exists() and not vs_code_settings.is_file():
+        raise typer.BadParameter(f"VS Code settings path '{vs_code_settings}' exists and is not a file.")
+    elif not vs_code_settings.exists():
+        vs_code_settings.parent.mkdir(parents=True, exist_ok=True)
+    generate_vs_code_settings(vs_code_settings)
+    typer.echo(f"VS Code settings file '{vs_code_settings}' updated successfully with JSON schema associations for fishy-config.")
 
 
 def parse_context_options(context_options: list[str]) -> dict[str, str]:
