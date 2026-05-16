@@ -65,7 +65,6 @@ class SourceTreeScanner:
                 raise InvalidMetadataError(
                     f"Variant key {dir_meta.variant.key} is empty for directory {path}"
                 )
-            base_rel = base_rel / name
             path = path / name
             if not path.is_dir():
                 if dir_meta.variant.skip_if_missing:
