@@ -17,7 +17,7 @@ class FileMetadata(BaseModel):
     )
     path_absolute: bool = Field(
         default=False,
-        description="Whether the provided path should be treated as absolute. If true, the path will be realtive to the output directory. If false, the path will be treated as relative itself.",
+        description="Whether the provided path should be treated as absolute. If true, the path will be treated as absolute relative to the output directory. If false, the path will be treated as relative itself.",
     )
     output_name: str | None = Field(
         default=None,
