@@ -15,8 +15,9 @@ class FileMetadata(BaseModel):
         default=None,
         description="Optional new path for the file when rendered. Use a '/' prefix for absolute paths or no prefix for relative paths.",
     )
-    rename: str | None = Field(
-        default=None, description="Optional new name for the file when rendered."
+    output_name: str | None = Field(
+        default=None,
+        description="Optional new name for the file when rendered.",
     )
     encoding: str | None = Field(
         default=None,
@@ -46,6 +47,10 @@ class DirectoryVariantMode(BaseModel):
     )
     mapping: dict[str, str] | None = Field(
         default=None, description="Optional mapping of context values to subdirectory names."
+    )
+    skip_if_missing: bool = Field(
+        default=False,
+        description="Whether to skip the directory if the context key is missing or evaluates to None.",
     )
 
 

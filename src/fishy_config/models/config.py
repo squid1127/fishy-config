@@ -45,3 +45,20 @@ class EngineConfig(BaseModel):
         if not value.is_dir():
             raise ValueError(f"{value} is not a valid directory.")
         return value
+    
+    def context_get(self, key: str, separator: str = ".") -> Any:
+        """Get a value from the context using a dot-separated key."""
+        keys = key.split(separator)
+        value = self.context
+        for k in keys:
+            if isinstance(value, dict) and k in value:
+                value = value[k]
+            elif isinstance(value, list):
+                try:
+                    index = int(k)
+                    value = value[index]
+                except (ValueError, IndexError):
+                    raise KeyError(f"Key '{key}' not found in context.")
+            else:
+                raise KeyError(f"Key '{key}' not found in context")
+        return value

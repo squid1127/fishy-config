@@ -55,7 +55,37 @@ class SourceTreeScanner:
 
         base_rel = self._resolve_directory_base_path(rel_path, dir_meta)
 
-        for item in sorted(path.iterdir()):
+        if dir_meta.variant:
+            value = self.config.context_get(dir_meta.variant.key)
+            if dir_meta.variant.mapping:
+                name = dir_meta.variant.mapping.get(value)
+            else:
+                name = value
+            if not name:
+                raise InvalidMetadataError(
+                    f"Variant key {dir_meta.variant.key} is empty for directory {path}"
+                )
+            base_rel = base_rel / name
+            path = path / name
+            if not path.is_dir():
+                if dir_meta.variant.skip_if_missing:
+                    logger.warning(
+                        f"Skipping variant directory {path} because it does not exist for variant key {dir_meta.variant.key}"
+                    )
+                    return
+                raise InvalidMetadataError(
+                    f"Variant directory {path} does not exist for variant key {dir_meta.variant.key}"
+                )
+
+            yield from self._iter_queued_files(path, base_rel)
+            return
+
+        if dir_meta.flatten:
+            items = sorted(path.glob("**/*"))
+        else:
+            items = sorted(path.iterdir())
+
+        for item in items:
             if item.is_dir():
                 yield from self._iter_queued_files(item, base_rel / item.name)
                 continue
@@ -127,8 +157,8 @@ class SourceTreeScanner:
                 )
                 relative = base_rel / item.name
 
-        if file_meta.rename:
-            relative = relative.with_name(file_meta.rename)
+        if file_meta.output_name:
+            relative = relative.with_name(file_meta.output_name)
         if relative.suffix == self.config.template_suffix:
             relative = relative.with_suffix("")
 
