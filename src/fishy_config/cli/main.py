@@ -159,16 +159,21 @@ class FishyConfigCLI:
         self.console.print(
             f"[bold green]Successfully generated {len([a for a in artifact_results if not a.error])} artifacts.[/bold green]"
         )
+        
+        results_failed =  len([r for r in results if r.error])
 
-        self.console.print("[bold green]Build process completed successfully.[/bold green]")
+        self.console.print("[bold green]Build process completed successfully.\nOverview:[/bold green]")
+        self.console.print(f"[bold blue]{len(results)} files [/bold blue]")
+        self.console.print(f"[bold green]{len(results) - results_failed} successful[/bold green]")
+        self.console.print(f"[bold red]{results_failed} failed[/bold red]")
         self.console.print(f"[bold blue]Output directory: {engine_config.output_dir}[/bold blue]")
         for artifact_result in artifact_results:
             if artifact_result.error:
                 self.console.print(
-                    f"[red]- Artifact: {artifact_result.artifact.path} failed with error: {artifact_result.error}[/red]"
+                    f"[red]Artifact: {artifact_result.artifact.path} failed with error: {artifact_result.error}[/red]"
                 )
             else:
-                self.console.print(f"[green]- Artifact: {artifact_result.generated_path}[/green]")
+                self.console.print(f"[green]Artifact: {artifact_result.generated_path}[/green]")
 
     def _apply_build_config_to_context(self) -> None:
         """Apply the build configuration to the context manager."""
