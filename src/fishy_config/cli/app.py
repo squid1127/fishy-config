@@ -11,7 +11,6 @@ import yaml
 from ..log import enable_logging, get_logger
 from .main import FishyConfigCLI
 from .models import ContextSourceType
-from .schema_gen import generate_schemas, generate_vs_code_settings
 
 logger = get_logger(__name__)
 
@@ -30,7 +29,7 @@ def main(
 ) -> None:
     """Configure CLI logging before command execution."""
     del ctx
-    enable_logging(logging.DEBUG if debug else logging.INFO)
+    enable_logging(logging.DEBUG if debug else logging.WARNING)
     logger.debug("Debug logging enabled.")
 
 
@@ -61,11 +60,17 @@ def build(
     interactive: bool = typer.Option(
         False, "--interactive", "-i", help="Run in interactive mode to confirm actions."
     ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Run the build process without generating any files."
+    ),
+    export: bool = typer.Option(
+        False, "--export", "-e", help="Export the final rendered artifact to the specified export path in the config after rendering."
+    ),
 ):
     """Build artifacts based on the provided build configuration file."""
 
     app_instance = FishyConfigCLI(
-        build_file=build_file, presets=presets, flow=flow, interactive=interactive
+        build_file=build_file, presets=presets, flow=flow, interactive=interactive, dry_run=dry_run, export=export
     )
     app_instance.read_build_file()
     app_instance.add_context_source(
@@ -76,39 +81,6 @@ def build(
     rich.print("[green]Configuration loaded successfully. Starting build process...[/green]")
     app_instance.run()
     
-@app.command()
-def generate_schema(
-    output: Path = typer.Argument(
-        Path(".fishy-config/schemas"), help="The output directory where the generated JSON schema files will be saved."
-    ),
-    vs_code_settings: Path | None = typer.Option(
-        None,
-        "--vs-code-settings",
-        help="If provided, also update or generate a VS Code settings.json file with JSON schema associations for the generated schema files.",
-    ),
-):
-    """Generate JSON schema files for the Pydantic models used in fishy-config."""
-    if output.exists() and not output.is_dir():
-        raise typer.BadParameter(f"Output path '{output}' exists and is not a directory.")
-    elif not output.exists():
-        output.mkdir(parents=True)
-    generate_schemas(output)
-    typer.echo(f"JSON schema files generated successfully in '{output}'.")
-    
-@app.command()
-def generate_schema_vs(
-    vs_code_settings: Path = typer.Argument(
-        Path(".vscode/settings.json"), help="The path to the VS Code settings.json file to update or create with JSON schema associations for fishy-config."
-    )
-):
-    """Generate or update a VS Code settings.json file with JSON schema associations for the Pydantic models used in fishy-config."""
-    if vs_code_settings.exists() and not vs_code_settings.is_file():
-        raise typer.BadParameter(f"VS Code settings path '{vs_code_settings}' exists and is not a file.")
-    elif not vs_code_settings.exists():
-        vs_code_settings.parent.mkdir(parents=True, exist_ok=True)
-    generate_vs_code_settings(vs_code_settings)
-    typer.echo(f"VS Code settings file '{vs_code_settings}' updated successfully with JSON schema associations for fishy-config.")
-
 
 def parse_context_options(context_options: list[str]) -> dict[str, str]:
     """Parse context options provided as key=value pairs into a dictionary."""
