@@ -27,6 +27,7 @@ typer = {extras = ["all"], version = "^0.25.1"}
 platformdirs = "^4.9.6"
 deepmerge = "^2.0"
 jsonschema = "^4.26.0"
+ruamel-yaml = "^0.19.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.0"
