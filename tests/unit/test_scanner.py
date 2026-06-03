@@ -1,9 +1,10 @@
 """Tests for scanner module."""
 
 import pytest
+from pathlib import Path
 from unittest.mock import Mock
 from fishy_config.scanner import SourceTreeScanner
-from fishy_config.models.config import EngineConfig
+from fishy_config.models.config import EngineConfig, OutputConfig
 
 
 @pytest.fixture
@@ -19,7 +20,7 @@ def mock_config():
 def mock_renderer():
     """Create a mock TemplateRenderer."""
     renderer = Mock()
-    renderer.render = Mock(side_effect=lambda text, context: text)
+    renderer.render = Mock(side_effect=lambda text, context, internal_context: text)
     return renderer
 
 
@@ -56,10 +57,10 @@ def test_scan_skips_files_matching_patterns(tmp_path):
     config = EngineConfig(
         source_dir=source,
         output_dir=output,
-        skip_patterns=["skip.txt", "*.log"],
+        output_config=OutputConfig(skip_patterns=["skip.txt", "*.log"]),
     )
     renderer = Mock()
-    renderer.render = Mock(side_effect=lambda text, context: text)
+    renderer.render = Mock(side_effect=lambda text, context, internal_context: text)
 
     scanner = SourceTreeScanner(config, renderer)
     queued = list(scanner.scan())
@@ -86,10 +87,10 @@ def test_scan_skips_directories_matching_patterns(tmp_path):
     config = EngineConfig(
         source_dir=source,
         output_dir=output,
-        skip_patterns=["internal/**"],
+        output_config=OutputConfig(skip_patterns=["internal/**"]),
     )
     renderer = Mock()
-    renderer.render = Mock(side_effect=lambda text, context: text)
+    renderer.render = Mock(side_effect=lambda text, context, internal_context: text)
 
     scanner = SourceTreeScanner(config, renderer)
     queued = list(scanner.scan())

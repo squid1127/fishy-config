@@ -35,7 +35,7 @@ def test_render_simple_template(renderer):
     """Test rendering a simple template."""
     template = "Hello {{ name }}"
     context = {"name": "World"}
-    result = renderer.render(template, context)
+    result = renderer.render(template, context, None)
     assert result == "Hello World"
 
 
@@ -43,5 +43,5 @@ def test_render_with_variables(renderer):
     """Test rendering with context variables."""
     template = "Value: {{ value }}"
     context = {"value": 42}
-    result = renderer.render(template, context)
+    result = renderer.render(template, context, None)
     assert result == "Value: 42"
