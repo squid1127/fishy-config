@@ -55,7 +55,7 @@ def test_build_creates_components(
 
     build(mock_config)
 
-    mock_renderer.assert_called_once_with(mock_config, [])
+    mock_renderer.assert_called_once_with(mock_config)
     mock_scanner.assert_called_once()
     mock_artifact.assert_called_once()
     mock_output.assert_called_once()
