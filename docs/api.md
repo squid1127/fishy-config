@@ -16,11 +16,15 @@ cfg = EngineConfig(
 artifacts = build(cfg)
 ```
 
-CLI helpers
+## Components
+
+### CLI helpers
 
 The CLI Typer app is exposed in `fishy_config.cli.app`. The main executor class is `fishy_config.cli.main.FishyConfigCLI` which reads a `build.yaml`, merges context sources and runs the scan/render/artifact steps.
 
-Core engine components
+**Note**: Some components of fishy-config are built into the CLI and not exposed as part of the public API, including context validation (instead of raw dict) and build file parsing (instead of `EngineConfig` model).
+
+### Core engine components
 
 - `TemplateRenderer` (`fishy_config.renderer`) — renders Jinja2 templates with a provided context.
 - `SourceTreeScanner` (`fishy_config.scanner`) — walks the `source_dir` and yields `QueuedFile` objects describing files to render or copy.
