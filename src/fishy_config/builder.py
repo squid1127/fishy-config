@@ -14,7 +14,7 @@ def build(config: EngineConfig) -> list[ArtifactResult]:
     Args:
         config (EngineConfig): The configuration for the build process.
     """
-    renderer = TemplateRenderer(config, [])
+    renderer = TemplateRenderer(config)
     scanner = SourceTreeScanner(config, renderer)
     artifact_generator = ArtifactGenerator(config, renderer)
     output_generator = OutputBuilder(config, renderer)
