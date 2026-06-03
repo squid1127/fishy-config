@@ -1,6 +1,6 @@
 [project]
 name = "fishy-config"
-version = "0.1.0"
+version = "0.2.0"
 description = "A fishy python tool to make managing config files easier using a simple templating system."
 authors = [
     { name = "squid1127", email = "120748767+squid1127@users.noreply.github.com" },

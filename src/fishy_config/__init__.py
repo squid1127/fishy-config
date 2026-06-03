@@ -4,7 +4,7 @@ This package exposes the main build entrypoint, CLI app, logging helpers,
 core exception types, data models, and utilities for custom implementations.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 # CLI and build
 from .cli import app
