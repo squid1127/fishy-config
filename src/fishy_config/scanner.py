@@ -7,7 +7,7 @@ from typing import Iterator, TypeVar
 from pydantic import ValidationError
 
 from .log import get_logger
-from .models.files import FileMetadata, DirectoryMetadata, QueuedFile
+from .models.files import FileMetadata, DirectoryMetadata, QueuedFile, FailedFile
 from .models.config import EngineConfig
 from .models.exceptions import InvalidMetadataError, TemplateRenderError
 from .models.enums import FileType
@@ -19,216 +19,153 @@ MetadataModel = TypeVar("MetadataModel", FileMetadata, DirectoryMetadata)
 
 
 class SourceTreeScanner:
-    """Scans a source directory and produces metadata for files and directories.
-
-    The implementation here factors out metadata reading and yields
-    QueuedFile objects from a single recursive generator, keeping the
-    relative-path resolution logic in one place.
+    """
+    Scans a source directory and generates QueuedFile objects representing discovered files and their associated metadata.
     """
 
-    def __init__(self, config: EngineConfig, renderer: TemplateRenderer):
+    def __init__(
+        self, config: EngineConfig, renderer: TemplateRenderer, source_dir: Path | None = None
+    ):
         self.config = config
         self.renderer = renderer
-        self._scan_root: Path | None = None
+        self.source_dir = source_dir or config.source_dir
+        if not (self.source_dir and self.source_dir.is_dir()):
+            raise ValueError(
+                f"Source directory {self.source_dir} does not exist or is not a directory."
+            )
 
-    def scan(self, source_dir: Path | None = None) -> Iterator[QueuedFile]:
+    def scan_and_raise(self) -> Iterator[QueuedFile]:
+        """Scan the source directory and yield QueuedFile objects, raising exceptions on errors."""
+        for result in self.scan():
+            if isinstance(result, FailedFile):
+                logger.error(f"Failed to queue file {result.source}: {result.error}")
+                raise result.error
+            yield result
+
+    def scan(self) -> Iterator[QueuedFile | FailedFile]:
         """Return an iterator of QueuedFile objects representing the files to be rendered from the source directory."""
-        if source_dir is None:
-            source_dir = self.config.source_dir
 
-        logger.info(f"Scanning source directory {source_dir} for files to render...")
+        logger.info(f"Scanning source directory {self.source_dir} for files to render...")
 
-        if not source_dir.is_dir():
-            raise ValueError(f"Source directory {source_dir} does not exist or is not a directory.")
+        if not self.source_dir.is_dir():
+            raise ValueError(
+                f"Source directory {self.source_dir} does not exist or is not a directory."
+            )
 
-        self._scan_root = source_dir
-        try:
-            yield from self._iter_queued_files(source_dir, Path())
-        finally:
-            self._scan_root = None
+        yield from self._iter_queued_files(self.source_dir, Path())
 
-    def _iter_queued_files(self, path: Path, rel_path: Path) -> Iterator[QueuedFile]:
+    def _iter_queued_files(self, path: Path, rel_path: Path) -> Iterator[QueuedFile | FailedFile]:
         """Recursively iterate QueuedFile objects under `path`.
 
         `rel_path` is the path to use for files under `path` unless overridden by
         directory or file metadata.
         """
+
         if not path.is_dir():
             raise ValueError(f"Path {path} is not a directory.")
 
-        dir_meta = self._read_directory_metadata_or_skip(path, rel_path)
-        if dir_meta is None or dir_meta.skip:
+        try:
+            # Read directory metadata
+            meta = self._read_dir_metadata(path, rel_path)
+            if meta.skip or self._matches_skip_patterns(rel_path.as_posix(), is_dir=True):
+                logger.debug(f"Skipping directory {path} due to metadata skip flag")
+                return
+
+            rel_path = self._manipulate_rel_path(rel_path, meta)
+            items = self._get_items(path, meta)
+
+        except Exception as e:
+            logger.exception(f"Error processing directory {path}")
+            yield FailedFile(source=path, relative_path=rel_path, error=e)
             return
-
-        base_rel = self._resolve_directory_base_path(rel_path, dir_meta)
-
-        if dir_meta.variant:
-            value = self.config.context_get(dir_meta.variant.key)
-            if dir_meta.variant.mapping:
-                name = dir_meta.variant.mapping.get(value)
-            else:
-                name = value
-            if not name:
-                raise InvalidMetadataError(
-                    f"Variant key {dir_meta.variant.key} is empty for directory {path}"
-                )
-            path = path / name
-            if not path.is_dir():
-                if dir_meta.variant.skip_if_missing:
-                    logger.warning(
-                        f"Skipping variant directory {path} because it does not exist for variant key {dir_meta.variant.key}"
-                    )
-                    return
-                raise InvalidMetadataError(
-                    f"Variant directory {path} does not exist for variant key {dir_meta.variant.key}"
-                )
-
-            yield from self._iter_queued_files(path, base_rel)
-            return
-
-        if dir_meta.flatten:
-            items = sorted(path.glob("**/*"))
-        else:
-            items = sorted(path.iterdir())
 
         for item in items:
             if item.is_dir():
-                yield from self._iter_queued_files(item, base_rel / item.name)
+                yield from self._iter_queued_files(item, rel_path / item.name)
                 continue
+            result = self._build_queued_file(item, rel_path / item.name)
+            if result is not None:
+                yield result
 
-            queued = self._build_queued_file(item, base_rel)
-            if queued is not None:
-                yield queued
-
-    def _read_directory_metadata_or_skip(
-        self, path: Path, rel_path: Path
-    ) -> DirectoryMetadata | None:
-        """Read directory metadata, returning None when metadata is invalid."""
-        if self._should_skip_source_path(path, is_dir=True):
-            logger.debug(f"Skipping directory {path} due to skip_patterns")
-            return None
-
+    def _build_queued_file(self, item: Path, item_rel: Path) -> QueuedFile | FailedFile | None:
+        """Build an QueuedFile for `item`, or return a FailedFile when it should be skipped or an error occurs."""
         try:
-            return self._read_dir_metadata(path, rel_path)
-        except InvalidMetadataError as e:
-            logger.warning(f"Skipping directory {path} due to invalid metadata: {e}")
-            return None
+            item_path = item_rel
 
-    def _resolve_directory_base_path(self, rel_path: Path, dir_meta: DirectoryMetadata) -> Path:
-        """Resolve the relative output base path for a directory."""
-        if dir_meta.output_name:
-            rel_path = rel_path.with_name(dir_meta.output_name)
-        if not dir_meta.path:
-            return rel_path
-        return dir_meta.path if dir_meta.path_absolute else rel_path / dir_meta.path
+            if item.name.endswith(self.config.output_config.metadata_suffix):
+                logger.debug(f"Skipping metadata file {item}")
+                return
 
-    def _build_queued_file(self, item: Path, base_rel: Path) -> QueuedFile | None:
-        """Build an QueuedFile for `item`, or return None when it should be skipped."""
-        if self._should_skip_source_path(item, is_dir=False):
-            logger.debug(f"Skipping file {item} due to skip_patterns")
-            return None
+            if self._matches_skip_patterns((item_rel).as_posix(), is_dir=False):
+                logger.debug(f"Skipping file {item} due to skip patterns")
+                return
 
-        if item.name.endswith(self.config.metadata_suffix):
-            return None
+            file_meta = self._read_file_metadata(item, item_rel)
+            if file_meta.skip:
+                logger.debug(f"Skipping file {item} due to metadata skip flag")
+                return
+            item_path = self._manipulate_rel_path(item_rel, file_meta)
+            if item_path.suffix == self.config.output_config.template_suffix:
+                item_path = item_path.with_suffix("")
+            file_type = (
+                FileType.TEMPLATE
+                if item.suffix == self.config.output_config.template_suffix
+                else FileType.RAW
+            )
+            return QueuedFile(
+                source=item, relative_path=item_path, file_type=file_type, metadata=file_meta
+            )
 
-        file_meta = self._read_file_metadata_or_skip(item, base_rel)
-        if file_meta is None or file_meta.skip:
-            return None
+        except Exception as e:
+            logger.exception(f"Error processing file {item}")
+            return FailedFile(source=item, relative_path=item_rel, error=e)
 
-        relative = self._resolve_file_relative_path(item, base_rel, file_meta)
-        file_type = (
-            FileType.TEMPLATE if item.suffix == self.config.template_suffix else FileType.RAW
-        )
-        return QueuedFile(
-            source=item, relative_path=relative, file_type=file_type, metadata=file_meta
-        )
+    def _get_items(self, path: Path, meta: DirectoryMetadata) -> list[Path]:
+        """Get the list of items to process under a directory, applying flattening if specified."""
+        if meta.variant:
+            path = path / meta.variant
+            if not path.is_dir():
+                if meta.variant_skip_if_missing:
+                    logger.debug(f"Skipping directory {path} due to missing variant")
+                    return []
+                raise InvalidMetadataError(
+                    f"Variant directory {path} does not exist for variant key {meta.variant} (Set variant_skip_if_missing to true to skip instead of erroring)"
+                )
 
-    def _read_file_metadata_or_skip(self, file_path: Path, rel_path: Path) -> FileMetadata | None:
-        """Read file metadata, returning None when metadata is invalid."""
-        try:
-            return self._read_file_metadata(file_path, rel_path)
-        except InvalidMetadataError as e:
-            logger.warning(f"Skipping file {file_path} due to invalid metadata: {e}")
-            return None
+        if meta.flatten:
+            return sorted(path.glob("**/*"))
+        else:
+            return sorted(path.iterdir())
 
-    def _should_skip_source_path(self, source_path: Path, *, is_dir: bool) -> bool:
-        """Return True when the source path matches any configured skip pattern."""
-        relative = self._relative_source_path(source_path)
-        if relative is None:
-            return False
-
-        return any(
-            self._pattern_matches_path(pattern, relative, is_dir)
-            for pattern in self._skip_patterns()
-        )
-
-    def _relative_source_path(self, source_path: Path) -> str | None:
-        """Return the path relative to the active scan root as POSIX text."""
-        if self._scan_root is None:
-            return None
-
-        try:
-            relative_path = source_path.relative_to(self._scan_root)
-        except ValueError:
-            return None
-
-        if relative_path == Path():
-            return None
-
-        return relative_path.as_posix()
-
-    def _skip_patterns(self) -> list[str]:
-        """Return normalized skip patterns from config."""
-        patterns = getattr(self.config, "skip_patterns", []) or []
-        return [pattern.strip() for pattern in patterns if pattern and pattern.strip()]
-
-    def _pattern_matches_path(self, pattern: str, relative: str, is_dir: bool) -> bool:
-        """Check whether a pattern matches a source-relative path."""
-        candidates = [relative, f"{relative}/"] if is_dir else [relative]
-        if any(fnmatchcase(candidate, pattern) for candidate in candidates):
-            return True
-
-        if not is_dir or not pattern.endswith("/**"):
-            return False
-
-        base = pattern[:-3].rstrip("/")
-        return bool(base) and (relative == base or relative.startswith(f"{base}/"))
-
-    def _resolve_file_relative_path(
+    def _manipulate_rel_path(
         self,
-        item: Path,
-        base_rel: Path,
-        file_meta: FileMetadata,
+        path: Path,
+        meta: FileMetadata | DirectoryMetadata,
     ) -> Path:
-        """Resolve relative output path for a file after metadata overrides."""
-        relative = base_rel / item.name
+        """Manipulate relative path based on metadata overrides."""
+        if meta.path:
+            if meta.path_absolute:
+                path = meta.path
+            else:
+                path = path / meta.path
 
-        if file_meta.path:
-            try:
-                relative = (
-                    file_meta.path.relative_to("/")
-                    if file_meta.path_absolute
-                    else base_rel / file_meta.path
-                )
-            except ValueError:
-                logger.warning(
-                    f"Invalid file path metadata {file_meta.path} for {item}, using base relative path {base_rel}"
-                )
-                relative = base_rel / item.name
+        if meta.name:
+            path = path.with_name(meta.name)
 
-        if file_meta.output_name:
-            relative = relative.with_name(file_meta.output_name)
-        if relative.suffix == self.config.template_suffix:
-            relative = relative.with_suffix("")
-
-        return relative
+        return path
 
     def _read_dir_metadata(self, path: Path, rel_path: Path) -> DirectoryMetadata:
         """Read and validate directory metadata from the configured suffix."""
-        config_file = path / self.config.metadata_suffix
-        meta = self._read_metadata(config_file, DirectoryMetadata, "directory", rel_path)
-        logger.debug(f"Read directory metadata from {config_file} -> {meta}")
-        return meta
+        return DirectoryMetadata(
+            **self._read_metadata_raw(
+                path,
+                internal_context={
+                    "source_path": path,
+                    "relative_path": rel_path,
+                    "config": self.config,
+                },
+            )
+        )
 
     def _read_file_metadata(self, file_path: Path, rel_path: Path) -> FileMetadata:
         """Read and validate file-level metadata (file + metadata_suffix).
@@ -236,70 +173,55 @@ class SourceTreeScanner:
         Metadata files are expected at `file.<suffix><metadata_suffix>` to
         preserve the previous behavior.
         """
-        metadata_file = self._resolve_metadata_path(file_path)
-        meta = self._read_metadata(metadata_file, FileMetadata, "file", rel_path)
-        if metadata_file.is_file():
-            logger.debug(f"Read file metadata from {metadata_file} -> {meta}")
-        return meta
+        return FileMetadata(
+            **self._read_metadata_raw(
+                file_path,
+                internal_context={
+                    "source_path": file_path,
+                    "relative_path": rel_path,
+                    "config": self.config,
+                },
+            )
+        )
 
-    def _resolve_metadata_path(self, file_path: Path) -> Path:
-        """Resolve the metadata path for a source file."""
-        if file_path.suffix == self.config.template_suffix:
-            stem = file_path.name[: -len(self.config.template_suffix)]
-            return file_path.with_name(f"{stem}{self.config.metadata_suffix}")
+    def _read_metadata_raw(self, path: Path, internal_context: dict | None = None) -> dict:
+        """Read and return raw metadata from a YAML file."""
+        if path.is_file():
+            metadata_path = path.with_name(path.name + self.config.output_config.metadata_suffix)
+        elif path.is_dir():
+            metadata_path = path / self.config.output_config.metadata_suffix
+        else:
+            raise ValueError(f"Path {path} is neither a file nor a directory.")
 
-        return file_path.with_name(f"{file_path.name}{self.config.metadata_suffix}")
-
-    def _read_metadata(
-        self,
-        metadata_path: Path,
-        metadata_model: type[MetadataModel],
-        metadata_kind: str,
-        rel_path: Path,
-    ) -> MetadataModel:
-        """Read and parse metadata from `metadata_path` into a typed model."""
         if not metadata_path.is_file():
-            return metadata_model()
+            return {}
+        return self._read_yaml(metadata_path, internal_context=internal_context)
 
-        try:
-            data = self._read_yaml_metadata(metadata_path, rel_path)
-            return metadata_model(**data)
-        except (InvalidMetadataError, ValidationError) as e:
-            raise InvalidMetadataError(
-                f"Failed to read {metadata_kind} metadata from {metadata_path}: {e}"
-            ) from e
-
-    def _read_yaml_metadata(self, yaml_path: Path, relative_path: Path) -> dict:
-        """Read and validate metadata from a YAML file."""
-        if not yaml_path.is_file():
-            raise InvalidMetadataError(f"Metadata file {yaml_path} does not exist.")
-
+    def _read_yaml(
+        self, yaml_path: Path, template: bool = True, internal_context: dict | None = None
+    ) -> dict:
+        """Read and return data from a YAML file. If `template` is True, render the file as a template before parsing."""
         try:
             text = yaml_path.read_text(encoding="utf-8")
-        except OSError:
+            if template:
+                text = self.renderer.render(text, None, internal_context)
+            return yaml.safe_load(text) or {}
+        except OSError as e:
             logger.exception(f"Failed to read metadata file {yaml_path}")
-            raise InvalidMetadataError(f"Failed to read metadata file {yaml_path}") from None
-
-        try:
-            context = self.config.context.copy()
-            context[self.config.internal_template_namespace] = {
-                "source_path": yaml_path,
-                "relative_path": relative_path,
-                "config": self.config,
-            }
-            rendered_text = self.renderer.render(text, context)
-        except TemplateRenderError:
-            logger.exception(f"Failed to render metadata template {yaml_path}")
-            raise InvalidMetadataError(f"Failed to render metadata template {yaml_path}") from None
-
-        try:
-            data = yaml.safe_load(rendered_text)
-            if not isinstance(data, dict):
-                logger.error(f"Metadata file {yaml_path} is not a dictionary at top level")
-                raise InvalidMetadataError(
-                    f"Metadata file {yaml_path} must contain a YAML dictionary at the top level."
-                )
-            return data
-        except yaml.YAMLError:
+            raise InvalidMetadataError(f"Failed to read metadata file {yaml_path}") from e
+        except yaml.YAMLError as e:
             logger.exception(f"Failed to parse YAML metadata from {yaml_path}")
-            raise InvalidMetadataError(f"Failed to read metadata from {yaml_path}") from None
+            raise InvalidMetadataError(f"Failed to read metadata from {yaml_path}") from e
+
+    def _matches_skip_patterns(self, relative: str, is_dir: bool) -> bool:
+        """Check whether a relative path matches any configured skip pattern."""
+        patterns = self.config.output_config.skip_patterns
+        candidates = [relative, f"{relative}/"] if is_dir else [relative]
+        for pattern in patterns:
+            if any(fnmatchcase(candidate, pattern) for candidate in candidates):
+                return True
+            if is_dir and pattern.endswith("/**"):
+                base = pattern[:-3].rstrip("/")
+                if base and (relative == base or relative.startswith(f"{base}/")):
+                    return True
+        return False
