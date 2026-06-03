@@ -25,6 +25,10 @@ class BuildArtifact(BaseModel):
         True,
         description="Whether to overwrite the artifact if it already exists. Defaults to True. Must be True for CUSTOM_BUILDER artifacts.",
     )
+    primary: bool = Field(
+        False,
+        description="Whether this artifact is the primary artifact for the build. This is used to determine which artifact to return as the main result of the build process when multiple artifacts are defined.",
+    )
     
     @model_validator(mode="after") # type: ignore
     def validate_artifact(self) -> BuildArtifact:

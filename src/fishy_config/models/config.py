@@ -1,12 +1,46 @@
 """Main config model with engine configuration"""
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from pathlib import Path
 from typing import Any
 
 from .constants import ContextValue
 from .enums import ArtifactType
 from .artifact import BuildArtifact
+
+
+class OutputConfig(BaseModel):
+    """Configuration for the template renderer."""
+
+    internal_template_namespace: str = Field(
+        default="_fishy",
+        description="Namespace in the Jinja2 context for internal metadata and variables.",
+    )
+    clean_output: bool = Field(
+        default=False, description="Whether to clean the output directory before rendering."
+    )
+    overwrite: bool = Field(
+        default=False, description="Whether to overwrite existing files in the output directory."
+    )
+    template_skip_prefix: str | None = Field(
+        default="_",
+        description="Prefix for template files that should be skipped during scanning. Using this prefix twice will not skip it. For example, '_template.j2' will be skipped but '__template.j2' will not be skipped and will render to '_template'. Set to None to disable this behavior.",
+    )
+    metadata_suffix: str = Field(
+        default=".meta.yaml", description="Suffix for metadata files in the source directory."
+    )
+    template_suffix: str = Field(
+        default=".j2", description="Suffix for Jinja2 template files in the source directory."
+    )
+    skip_patterns: list[str] = Field(
+        default_factory=list,
+        description="List of glob patterns to match files that should be skipped during scanning.",
+    )
+    export_path: Path | None = Field(
+        default=None,
+        description="Optional path to export the final rendered artifact (including suffix). If more than one artifact is generated, the artifact marked as primary will be exported to this path. If no artifact is marked as primary, the first artifact in the list will be exported to this path. If not specified, artifacts will not be exported after rendering.",
+    )
+
 
 class EngineConfig(BaseModel):
     """Configuration for the templating engine."""
@@ -19,36 +53,22 @@ class EngineConfig(BaseModel):
     context: dict[str, ContextValue] = Field(
         default_factory=dict, description="The context data for rendering templates."
     )
-    
+
     artifacts: list[BuildArtifact] = Field(
         default_factory=list, description="List of build artifacts to produce after rendering."
     )
 
-    clean_output: bool = Field(
-        default=False, description="Whether to clean the output directory before rendering."
-    )
-    overwrite: bool = Field(
-        default=False, description="Whether to overwrite existing files in the output directory."
-    )
-    metadata_suffix: str = Field(
-        default=".meta.yaml", description="Suffix for metadata files in the source directory."
-    )
-    template_suffix: str = Field(
-        default=".j2", description="Suffix for Jinja2 template files in the source directory."
-    )
-    internal_template_namespace: str = Field(
-        default="_build", description="Namespace in the Jinja2 context for internal metadata and variables."
-    )
-    skip_patterns: list[str] = Field(
-        default_factory=list, description="List of glob patterns to match files that should be skipped during rendering."
+    output_config: OutputConfig = Field(
+        default_factory=OutputConfig, description="Configuration for the output renderer."
     )
 
     @field_validator("source_dir", "output_dir")
+    @classmethod
     def validate_directories(cls, value: Path) -> Path:
         if not value.is_dir():
             raise ValueError(f"{value} is not a valid directory.")
         return value
-    
+
     def context_get(self, key: str, separator: str = ".") -> Any:
         """Get a value from the context using a dot-separated key."""
         keys = key.split(separator)

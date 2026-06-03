@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, Field
 from pathlib import Path
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field as dataclass_field
 
 from .enums import FileType
 
@@ -19,13 +19,10 @@ class FileMetadata(BaseModel):
         default=False,
         description="Whether the provided path should be treated as absolute. If true, the path will be treated as absolute relative to the output directory. If false, the path will be treated as relative itself.",
     )
-    output_name: str | None = Field(
+    name: str | None = Field(
         default=None,
         description="Optional new name for the file when rendered.",
-    )
-    encoding: str | None = Field(
-        default=None,
-        description="Optional encoding to use when reading/writing this file. Defaults to UTF-8.",
+        alias="output_name",
     )
     priority: int = Field(
         default=0,
@@ -36,33 +33,22 @@ class FileMetadata(BaseModel):
         """Return a summary of the metadata for logging purposes."""
         summary = ""
         if self.skip:
-            summary += "skip, "
+            summary += "skip "
         if self.priority != 0:
-            summary += f"priority={self.priority}, "
+            summary += f"priority={self.priority} "
         return summary
-
-
-class DirectoryVariantMode(BaseModel):
-    """Model representing a directory's variant mode configuration."""
-
-    key: str = Field(
-        ...,
-        description="The context key to evaluate for this variant. This will be mapped to a subdirectory name based on the provided mapping or the value itself.",
-    )
-    mapping: dict[str, str] | None = Field(
-        default=None, description="Optional mapping of context values to subdirectory names."
-    )
-    skip_if_missing: bool = Field(
-        default=False,
-        description="Whether to skip the directory if the context key is missing or evaluates to None.",
-    )
 
 
 class DirectoryMetadata(FileMetadata):
     """Metadata for an queued directory."""
 
-    variant: DirectoryVariantMode | None = Field(
-        default=None, description="Optional configuration for directory variants based on context."
+    variant: str | None = Field(
+        default=None,
+        description="Match and promote the subdirectory with this name during scanning.",
+    )
+    variant_skip_if_missing: bool = Field(
+        default=False,
+        description="Whether to skip the directory if the specified variant is not found. If false, an error will be raised if the variant is not found.",
     )
     flatten: bool = Field(
         default=False, description="Whether to flatten the directory structure when rendering."
@@ -72,30 +58,41 @@ class DirectoryMetadata(FileMetadata):
         """Return a summary of the directory metadata for logging purposes."""
         summary = super().summary()
         if self.variant:
-            summary += f"variant key={self.variant.key}, "
-            if self.variant.mapping:
-                summary += f"variant mapping={self.variant.mapping}, "
+            summary += "variant"
+            if self.variant_skip_if_missing:
+                summary += "(skip if missing)"
+            summary += f"={self.variant} "
         if self.flatten:
-            summary += "flatten, "
+            summary += "flatten "
         return summary
 
 
-class QueuedFile(BaseModel):
-    """Model representing a file that is queued for copying/rendering."""
+@dataclass(frozen=True, slots=True)
+class ScanItem:
+    """Model representing a path that is scanned, including its source path and relative path from the source directory."""
 
-    source: Path = Field(..., description="The source path of the file.")
-    relative_path: Path = Field(
-        ..., description="The relative path of the file from the source directory."
-    )
-    file_type: FileType = Field(
-        ..., description="The type of the file (template, metadata, raw, other)."
-    )
-    metadata: FileMetadata = Field(..., description="The metadata associated with this file.")
+    source: Path
+    relative_path: Path
+
+
+@dataclass(frozen=True, slots=True)
+class QueuedFile(ScanItem):
+    """Dataclass representing a file that is queued for copying/rendering."""
+
+    file_type: FileType
+    metadata: FileMetadata = dataclass_field(default_factory=FileMetadata)
+
+
+@dataclass(frozen=True, slots=True)
+class FailedFile(ScanItem):
+    """Model representing a file that encountered an error during scanning, including the error message."""
+
+    error: Exception
 
 
 @dataclass(frozen=True, slots=True)
 class FileResult:
-    """Model representing the result of processing an queued file, including the rendered content and any errors."""
+    """Dataclass representing the result of processing an queued file, including the rendered content and any errors."""
 
     queued_file: QueuedFile
     rendered_content: str | None = None
