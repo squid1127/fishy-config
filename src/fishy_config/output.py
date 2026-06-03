@@ -25,7 +25,7 @@ class OutputBuilder:
 
     def clean_output_directory(self) -> None:
         """Clean the output directory if the clean_output flag is set in the configuration."""
-        if self.config.clean_output:
+        if self.config.output_config.clean_output:
             logger.info(f"Cleaning output directory {self.config.output_dir}...")
             try:
                 if self.config.output_dir.exists():
@@ -52,6 +52,9 @@ class OutputBuilder:
         for queued_file in queued_files:
             try:
                 if queued_file.file_type == FileType.TEMPLATE:
+                    if self._should_skip_file(queued_file):
+                        logger.info(f"Skipping file {queued_file.source} due to filename prefix match")
+                        continue
                     rendered_content = self.renderer.render_file(queued_file)
                     yield FileResult(queued_file=queued_file, rendered_content=rendered_content)
 
@@ -83,3 +86,15 @@ class OutputBuilder:
             queued_files,
             key=lambda f: (f.metadata.priority, f.file_type == FileType.TEMPLATE, f.relative_path),
         )
+
+    def _should_skip_file(self, queued_file: QueuedFile) -> bool:
+        """Determine whether a file should be skipped based on its filename and the skip_filename_prefixes configuration."""
+        prefix = self.config.output_config.template_skip_prefix
+        if prefix and queued_file.source.name.startswith(prefix):
+            if queued_file.source.name.startswith(prefix * 2):
+                logger.debug(f"File {queued_file.source} starts with double skip prefix '{prefix*2}' and will not be skipped")
+                return False
+            
+            logger.debug(f"File {queued_file.source} starts with skip prefix '{prefix}' and will be skipped")
+            return True
+        return False

@@ -64,12 +64,11 @@ class ArtifactGenerator:
             f"Rendering command for custom builder artifact at {artifact.path} with template: {artifact.command}"
         )
         try:
-            context = self.config.context.copy()
-            context[self.config.internal_template_namespace] = {
+            internal = {
                 "artifact": artifact,
                 "config": self.config,
             }
-            rendered_command = self.renderer.render(artifact.command, context)
+            rendered_command = self.renderer.render(artifact.command, None, internal)
             return rendered_command
         except Exception as e:
             logger.exception(

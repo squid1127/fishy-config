@@ -1,9 +1,10 @@
 """Template renderer for fishy-config."""
 
-from jinja2 import Environment, StrictUndefined
+from jinja2 import Environment, StrictUndefined, BaseLoader, TemplateNotFound
 from jinja2.exceptions import TemplateError, TemplateSyntaxError, UndefinedError
 from pathlib import Path
 from typing import List
+from .template_helpers import FILTERS, CONTEXT
 
 from .log import get_logger
 from .models.files import QueuedFile
@@ -13,15 +14,48 @@ from .models.exceptions import TemplateRenderError, TemplateUndefinedError, File
 logger = get_logger(__name__)
 
 
+class TemplateLoader(BaseLoader):
+    """Custom Jinja2 template loader that loads templates from the file system based on the queued files."""
+
+    def __init__(self, queued_files: List[QueuedFile] | None = None):
+        self.update_queued_files(queued_files or [])
+
+    def update_queued_files(self, queued_files: List[QueuedFile]) -> None:
+        """Update the internal mapping of queued files. This can be used to refresh the loader if new files are added after initialization."""
+        self.queued_files = {str(qf.relative_path): qf for qf in queued_files}
+
+    def get_source(self, environment: Environment, template: str):
+        """Load a template by its relative path from the queued files."""
+        if template not in self.queued_files:
+            raise TemplateNotFound(f"Template not found: {template}")
+        queued_file = self.queued_files[template]
+        try:
+            source = queued_file.source.read_text(encoding="utf-8")
+            return source, str(queued_file.source), lambda: True
+        except OSError as e:
+            logger.exception(f"Failed to read template file {queued_file.source}")
+            raise FileIOError(f"Failed to read template file {queued_file.source}: {str(e)}") from e
+
+
 class TemplateRenderer:
     """Renders templates using Jinja2."""
 
     def __init__(self, config: EngineConfig):
         self.config = config
-        self.env = Environment(undefined=StrictUndefined)
+        self.loader = TemplateLoader()
+        self.env = Environment(
+            undefined=StrictUndefined, loader=self.loader
+        )
+        self.env.filters.update(FILTERS)
+        self.env.globals.update(CONTEXT)
 
-    def render(self, text: str, context: dict) -> str:
+    def render(self, text: str, context: dict | None, internal_context: dict | None) -> str:
         """Render a template string with the given context, raising TemplateRenderError on failure."""
+        context = context or self.config.context or {}
+        context = context.copy()  # Avoid mutating the original context
+
+        if internal_context:
+            context[self.config.output_config.internal_template_namespace] = internal_context
         try:
             template = self.env.from_string(text)
             return template.render(context)
@@ -39,24 +73,23 @@ class TemplateRenderer:
         """Render a file and write the output to the configured output directory. Returns the rendered output as a string."""
         logger.debug(f"Rendering {queued_file.source} to {queued_file.relative_path}")
         try:
-            context = self._build_context_for_file(queued_file)
             content = self._read_file(queued_file)
-            rendered = self.render(content, context)
+            internal_context = self._build_internal_context(queued_file)
+            rendered = self.render(content, self.config.context, internal_context)
             self._write_file(queued_file, rendered)
             return rendered
         except Exception:
             logger.exception(f"Failed to render {queued_file.source}")
             raise
 
-    def _build_context_for_file(self, queued_file: QueuedFile) -> dict:
-        """Build the Jinja2 context for a given QueuedFile, including the file's metadata and relative path."""
-        context = self.config.context.copy()
-        context[self.config.internal_template_namespace] = {
+    def _build_internal_context(self, queued_file: QueuedFile) -> dict:
+        """Build the internal context for a queued file, which includes metadata and other information that can be used in templates."""
+        return {
             "metadata": queued_file.metadata,
             "relative_path": queued_file.relative_path,
+            "path": queued_file.relative_path,
             "source_path": queued_file.source,
         }
-        return context
 
     def _read_file(self, queued_file: QueuedFile) -> str:
         """Read the contents of a file as text."""
