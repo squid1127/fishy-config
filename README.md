@@ -4,6 +4,8 @@ A small Python utility for rendering configuration files using Jinja2!
 
 This is a personal project and not intended for production use.
 
+(This project is not in any way related to the fish shell or its configuration utility)
+
 ## Table of Contents
 
 - [How it works](#how-it-works)
@@ -83,7 +85,7 @@ Easily use fishy-config from the command line to build your configuration files.
 Creating a `dir/.meta.yaml` or `file.meta.yaml` allows you to specify metadata for that directory or file, which can be used to change output path, name, as well as other options.
 
 ```yaml
-skip: {{ skip_potatoes }}
+skip: { { skip_potatoes } }
 name: "fish"
 path: "No"
 ```
